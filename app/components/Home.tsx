@@ -8,14 +8,14 @@ interface HomeProps {
 
 export function Home({ totalAnimations, totalSounds, totalProducts }: HomeProps) {
   return (
-    <s-page heading="Welcome to Fly-to-Cart Pro">
-      <s-section heading="👋 Get Started">
+    <s-page heading="Fly-to-Cart Pro">
+      <s-section heading="Get Started">
         <s-paragraph>
           Create engaging add-to-cart experiences with custom animations and sounds for your Shopify store.
         </s-paragraph>
       </s-section>
 
-      <s-section heading="📊 Overview">
+      <s-section heading="Overview">
         <s-layout>
           <s-layout-section>
             <s-card>
@@ -61,7 +61,7 @@ export function Home({ totalAnimations, totalSounds, totalProducts }: HomeProps)
         </s-layout>
       </s-section>
 
-      <s-section heading="🚀 Quick Start">
+      <s-section heading="Quick Start">
         <s-stack direction="block" gap="base">
           <s-text>
             1. Create animations in the Animations section
@@ -76,24 +76,6 @@ export function Home({ totalAnimations, totalSounds, totalProducts }: HomeProps)
             4. Test on your store!
           </s-text>
         </s-stack>
-      </s-section>
-
-      <s-section heading="📚 Learn More" slot="aside">
-        <s-paragraph>
-          <s-link href="https://shopify.dev/docs/apps" target="_blank">
-            Shopify App Documentation
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-link href="#" target="_blank">
-            View Animation Previews
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-link href="#" target="_blank">
-            Settings
-          </s-link>
-        </s-paragraph>
       </s-section>
     </s-page>
   );
