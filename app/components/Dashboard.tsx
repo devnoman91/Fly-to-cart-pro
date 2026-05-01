@@ -1,17 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Page,
-  Layout,
-  Card,
-  Text,
-  BlockStack,
-  InlineStack,
-  Button,
-  DataTable,
-  Badge,
-  Spinner,
-  EmptyState,
-} from '@shopify/polaris';
+import React from 'react';
 
 interface Animation {
   id: string;
@@ -47,128 +34,115 @@ export function Dashboard({
   onAddSound,
 }: DashboardProps) {
   return (
-    <Page
-      title="Fly-to-Cart Pro"
-      subtitle="Manage animations and sounds for your store"
-      primaryAction={{
-        content: 'Settings',
-        onAction: () => {},
-      }}
-    >
-      <Layout>
-        <Layout.Section>
-          <BlockStack gap="400">
-            {/* Animations Section */}
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h2" variant="headingLg">
-                    Animations
-                  </Text>
-                  <Button onClick={onAddAnimation} variant="primary">
-                    Add Animation
-                  </Button>
-                </InlineStack>
+    <s-page heading="Fly-to-Cart Pro">
+      <s-button slot="primary-action" onClick={onAddAnimation}>
+        Add Animation
+      </s-button>
 
-                {isLoading ? (
-                  <Spinner accessibilityLabel="Loading animations" />
-                ) : animations.length > 0 ? (
-                  <DataTable
-                    columnContentTypes={['text', 'text', 'numeric', 'text']}
-                    headings={['Name', 'Key', 'Duration (ms)', 'Status']}
-                    rows={animations.map((animation) => [
-                      animation.animation_name,
-                      animation.animation_key,
-                      animation.duration_ms,
-                      animation.enabled === 'true' ? (
-                        <Badge tone="success">Enabled</Badge>
-                      ) : (
-                        <Badge>Disabled</Badge>
-                      ),
-                    ])}
-                  />
-                ) : (
-                  <EmptyState
-                    heading="No animations yet"
-                    action={{ content: 'Create animation', onAction: onAddAnimation }}
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+      <s-section heading="Animations">
+        {isLoading ? (
+          <s-paragraph>Loading animations...</s-paragraph>
+        ) : animations.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e0e0e0' }}>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Key</th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>
+                    Duration (ms)
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {animations.map((animation) => (
+                  <tr
+                    key={animation.id}
+                    style={{ borderBottom: '1px solid #e0e0e0' }}
                   >
-                    <p>Create your first animation to get started.</p>
-                  </EmptyState>
-                )}
-              </BlockStack>
-            </Card>
-
-            {/* Sounds Section */}
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h2" variant="headingLg">
-                    Sounds
-                  </Text>
-                  <Button onClick={onAddSound} variant="primary">
-                    Add Sound
-                  </Button>
-                </InlineStack>
-
-                {isLoading ? (
-                  <Spinner accessibilityLabel="Loading sounds" />
-                ) : sounds.length > 0 ? (
-                  <DataTable
-                    columnContentTypes={['text', 'text', 'numeric', 'text']}
-                    headings={['Name', 'Key', 'Duration (ms)', 'Status']}
-                    rows={sounds.map((sound) => [
-                      sound.sound_name,
-                      sound.sound_key,
-                      sound.duration_ms,
-                      sound.enabled === 'true' ? (
-                        <Badge tone="success">Enabled</Badge>
+                    <td style={{ padding: '10px' }}>
+                      {animation.animation_name}
+                    </td>
+                    <td style={{ padding: '10px' }}>
+                      {animation.animation_key}
+                    </td>
+                    <td style={{ padding: '10px' }}>
+                      {animation.duration_ms}
+                    </td>
+                    <td style={{ padding: '10px' }}>
+                      {animation.enabled === 'true' ? (
+                        <s-badge tone="success">Enabled</s-badge>
                       ) : (
-                        <Badge>Disabled</Badge>
-                      ),
-                    ])}
-                  />
-                ) : (
-                  <EmptyState
-                    heading="No sounds yet"
-                    action={{ content: 'Create sound', onAction: onAddSound }}
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Create your first sound to get started.</p>
-                  </EmptyState>
-                )}
-              </BlockStack>
-            </Card>
+                        <s-badge>Disabled</s-badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <s-paragraph>No animations yet. Create your first animation.</s-paragraph>
+        )}
+      </s-section>
 
-            {/* Stats Section */}
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingLg">
-                  Quick Stats
-                </Text>
-                <InlineStack gap="400">
-                  <div>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Total Animations
-                    </Text>
-                    <Text as="p" variant="headingLg">
-                      {animations.length}
-                    </Text>
-                  </div>
-                  <div>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Total Sounds
-                    </Text>
-                    <Text as="p" variant="headingLg">
-                      {sounds.length}
-                    </Text>
-                  </div>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-          </BlockStack>
-        </Layout.Section>
-      </Layout>
-    </Page>
+      <s-section heading="Sounds">
+        {isLoading ? (
+          <s-paragraph>Loading sounds...</s-paragraph>
+        ) : sounds.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e0e0e0' }}>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Name</th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Key</th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>
+                    Duration (ms)
+                  </th>
+                  <th style={{ textAlign: 'left', padding: '10px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sounds.map((sound) => (
+                  <tr
+                    key={sound.id}
+                    style={{ borderBottom: '1px solid #e0e0e0' }}
+                  >
+                    <td style={{ padding: '10px' }}>{sound.sound_name}</td>
+                    <td style={{ padding: '10px' }}>{sound.sound_key}</td>
+                    <td style={{ padding: '10px' }}>{sound.duration_ms}</td>
+                    <td style={{ padding: '10px' }}>
+                      {sound.enabled === 'true' ? (
+                        <s-badge tone="success">Enabled</s-badge>
+                      ) : (
+                        <s-badge>Disabled</s-badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <s-paragraph>No sounds yet. Create your first sound.</s-paragraph>
+        )}
+      </s-section>
+
+      <s-section heading="Quick Stats" slot="aside">
+        <s-box padding="base" borderWidth="base">
+          <s-stack direction="block" gap="base">
+            <div>
+              <s-text>Total Animations</s-text>
+              <s-heading level="1">{animations.length}</s-heading>
+            </div>
+            <div>
+              <s-text>Total Sounds</s-text>
+              <s-heading level="1">{sounds.length}</s-heading>
+            </div>
+          </s-stack>
+        </s-box>
+      </s-section>
+    </s-page>
   );
 }
