@@ -2,14 +2,14 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Dashboard } from "../components/Dashboard";
+import { Home } from "../components/Home";
 import {
   fetchAnimationPresets,
   fetchSoundPresets,
+  fetchProductsWithAnimations,
 } from "../utils/shopify-graphql";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -18,32 +18,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const animations = await fetchAnimationPresets(admin);
     const sounds = await fetchSoundPresets(admin);
+    const productsData = await fetchProductsWithAnimations(admin, 100);
 
-    return { animations, sounds };
+    return {
+      totalAnimations: animations.length,
+      totalSounds: sounds.length,
+      totalProducts: productsData.nodes?.length || 0,
+    };
   } catch (error) {
-    console.error("Failed to fetch presets:", error);
-    return { animations: [], sounds: [] };
+    console.error("Failed to fetch data:", error);
+    return {
+      totalAnimations: 0,
+      totalSounds: 0,
+      totalProducts: 0,
+    };
   }
 };
 
 export default function Index() {
-  const { animations = [], sounds = [] } = useLoaderData<typeof loader>();
-
-  const handleAddAnimation = () => {
-    // TODO: Navigate to create animation page
-  };
-
-  const handleAddSound = () => {
-    // TODO: Navigate to create sound page
-  };
+  const { totalAnimations, totalSounds, totalProducts } = useLoaderData<typeof loader>();
 
   return (
-    <Dashboard
-      animations={animations}
-      sounds={sounds}
-      isLoading={false}
-      onAddAnimation={handleAddAnimation}
-      onAddSound={handleAddSound}
+    <Home
+      totalAnimations={totalAnimations}
+      totalSounds={totalSounds}
+      totalProducts={totalProducts}
     />
   );
 }
