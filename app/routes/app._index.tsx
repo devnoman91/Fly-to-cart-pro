@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
 import type {
-  ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
@@ -30,7 +28,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Index() {
   const { animations = [], sounds = [] } = useLoaderData<typeof loader>();
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleAddAnimation = () => {
     // TODO: Navigate to create animation page
@@ -44,7 +41,7 @@ export default function Index() {
     <Dashboard
       animations={animations}
       sounds={sounds}
-      isLoading={isLoading}
+      isLoading={false}
       onAddAnimation={handleAddAnimation}
       onAddSound={handleAddSound}
     />
