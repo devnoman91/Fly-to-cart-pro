@@ -39,6 +39,14 @@ description = "Animation and sound configuration for add-to-cart action"
   [product.metafields.app.ftc_cart_config.access]
   admin = "merchant_read_write"
 
+[shop.metafields.app.ftc_global_settings]
+type = "json"
+name = "Fly-to-Cart Global Settings"
+description = "Global configuration for Fly-to-Cart Pro app"
+
+  [shop.metafields.app.ftc_global_settings.access]
+  admin = "merchant_read_write"
+
 [metaobjects.app.ftc_animation_preset]
 name = "FTC Animation Preset"
 description = "Predefined animation configuration for add-to-cart actions"
