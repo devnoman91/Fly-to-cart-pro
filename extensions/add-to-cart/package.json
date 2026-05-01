@@ -1,0 +1,13 @@
+{
+  "name": "fly-to-cart-pro-theme-extension",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "gsap": "^3.12.2",
+    "preact": "^10.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
