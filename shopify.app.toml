@@ -18,7 +18,7 @@ api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "write_products,read_products,write_metaobjects,read_metaobjects,write_metaobject_definitions,write_metafields,read_metafields"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
@@ -31,21 +31,75 @@ description = "Tracks products created by the Shopify app template for developme
   [product.metafields.app.demo_info.access]
   admin = "merchant_read_write"
 
-[metaobjects.app.example]
-name = "Example"
-description = "An example metaobject definition created by this template"
+[product.metafields.app.ftc_cart_config]
+type = "json"
+name = "Fly-to-Cart Config"
+description = "Animation and sound configuration for add-to-cart action"
 
-  [metaobjects.app.example.access]
+  [product.metafields.app.ftc_cart_config.access]
   admin = "merchant_read_write"
 
-[metaobjects.app.example.fields.title]
-name = "Title"
+[metaobjects.app.ftc_animation_preset]
+name = "FTC Animation Preset"
+description = "Predefined animation configuration for add-to-cart actions"
+
+  [metaobjects.app.ftc_animation_preset.access]
+  admin = "merchant_read_write"
+
+[metaobjects.app.ftc_animation_preset.fields.animation_name]
+name = "Animation Name"
 type = "single_line_text_field"
 required = true
 
-[metaobjects.app.example.fields.description]
-name = "Description"
+[metaobjects.app.ftc_animation_preset.fields.animation_key]
+name = "Animation Key"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.ftc_animation_preset.fields.duration_ms]
+name = "Duration (milliseconds)"
+type = "number_integer"
+
+[metaobjects.app.ftc_animation_preset.fields.preview_json]
+name = "GSAP Timeline Config"
 type = "multi_line_text_field"
+
+[metaobjects.app.ftc_animation_preset.fields.enabled]
+name = "Enabled"
+type = "boolean"
+
+[metaobjects.app.ftc_sound_preset]
+name = "FTC Sound Preset"
+description = "Predefined sound configuration for add-to-cart actions"
+
+  [metaobjects.app.ftc_sound_preset.access]
+  admin = "merchant_read_write"
+
+[metaobjects.app.ftc_sound_preset.fields.sound_name]
+name = "Sound Name"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.ftc_sound_preset.fields.sound_key]
+name = "Sound Key"
+type = "single_line_text_field"
+required = true
+
+[metaobjects.app.ftc_sound_preset.fields.file_url]
+name = "Sound File URL"
+type = "url"
+
+[metaobjects.app.ftc_sound_preset.fields.duration_ms]
+name = "Duration (milliseconds)"
+type = "number_integer"
+
+[metaobjects.app.ftc_sound_preset.fields.volume]
+name = "Volume"
+type = "number_decimal"
+
+[metaobjects.app.ftc_sound_preset.fields.enabled]
+name = "Enabled"
+type = "boolean"
 
 [build]
 automatically_update_urls_on_dev = true
