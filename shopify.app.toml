@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "9620563a9ea6bc8e3f91ec87e893f4e8"
-name = "fly-to-cart-pro"
+name = "Fly To Cart Pro"
 application_url = "https://example.com"
 embedded = true
 
