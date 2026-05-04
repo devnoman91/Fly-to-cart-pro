@@ -240,35 +240,31 @@ export async function fetchGlobalConfig(admin: any) {
   const query = `
     query {
       shop {
-        metafield(namespace: "app", key: "ftc_global_settings") {
-          value
-        }
+        id
+        animationKey: metafield(namespace: "fly_to_cart", key: "animation_key") { value }
+        soundKey: metafield(namespace: "fly_to_cart", key: "sound_key") { value }
       }
     }
   `;
 
   const result = await executeGraphQL<{ shop: any }>(admin, query);
-  const metafield = result.shop?.metafield;
-  return metafield ? JSON.parse(metafield.value) : null;
+  const { animationKey, soundKey } = result.shop;
+  if (!animationKey && !soundKey) return null;
+  return {
+    animationKey: animationKey?.value || null,
+    soundKey: soundKey?.value || null,
+  };
 }
 
 export async function saveGlobalConfig(admin: any, config: any) {
-  // First get the shop GID needed for metafieldsSet
   const shopResult = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
   const shopId = shopResult.shop.id;
 
   const query = `
     mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
       metafieldsSet(metafields: $metafields) {
-        metafields {
-          key
-          value
-        }
-        userErrors {
-          field
-          message
-          code
-        }
+        metafields { key value }
+        userErrors { field message code }
       }
     }
   `;
@@ -277,10 +273,17 @@ export async function saveGlobalConfig(admin: any, config: any) {
     metafields: [
       {
         ownerId: shopId,
-        namespace: "app",
-        key: "ftc_global_settings",
-        type: "json",
-        value: JSON.stringify(config),
+        namespace: "fly_to_cart",
+        key: "animation_key",
+        type: "single_line_text_field",
+        value: config.animationKey,
+      },
+      {
+        ownerId: shopId,
+        namespace: "fly_to_cart",
+        key: "sound_key",
+        type: "single_line_text_field",
+        value: config.soundKey,
       },
     ],
   });

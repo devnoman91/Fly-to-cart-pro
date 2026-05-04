@@ -161,12 +161,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     await saveGlobalConfig(admin, {
       animationKey: animation.key,
-      animationName: animation.name,
-      animationDuration: animation.duration,
       soundKey: sound.key,
-      soundName: sound.name,
-      soundDuration: sound.duration,
-      enabled: true,
     });
 
     console.log("[FlyToCart] Config saved successfully");

@@ -1,259 +1,107 @@
 {% comment %}
   Fly-to-Cart Pro App Embed Block
-  Injects animation and sound effects for add-to-cart actions
 {% endcomment %}
 
+{% assign animation_key = shop.metafields.fly_to_cart.animation_key.value %}
+{% assign sound_key = shop.metafields.fly_to_cart.sound_key.value %}
+
+{% if animation_key != blank or sound_key != blank %}
 <script>
-  // Fly to Cart Pro - Animation & Sound Extension
+  window.FlyToCartConfig = {
+    animationKey: {{ animation_key | default: '' | json }},
+    soundKey: {{ sound_key | default: '' | json }}
+  };
+
   class FlyToCartPro {
-    constructor() {
-      this.gsapLoaded = false;
+    constructor(config) {
+      this.config = config;
       this.audioContext = null;
-      this.soundCache = new Map();
+      this.gsapLoaded = false;
       this.init();
     }
 
     init() {
-      // Load GSAP library
-      this.loadGSAP(() => {
-        this.attachEventListeners();
-      });
-    }
-
-    loadGSAP(callback) {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js';
       script.onload = () => {
         this.gsapLoaded = true;
-        callback();
-      };
-      script.onerror = () => {
-        console.error('[FlyToCartPro] Failed to load GSAP');
+        this.attachListeners();
       };
       document.head.appendChild(script);
     }
 
-    attachEventListeners() {
-      // Listen for add-to-cart button clicks
+    attachListeners() {
       document.addEventListener('click', (e) => {
-        const addToCartBtn = e.target.closest('[data-add-to-cart], button[type="submit"]');
-        if (addToCartBtn && this.isAddToCartButton(addToCartBtn)) {
-          this.handleAddToCart(addToCartBtn);
-        }
-      });
-
-      // Listen for form submissions
-      document.addEventListener('submit', (e) => {
-        const form = e.target;
-        if (this.isAddToCartForm(form)) {
-          setTimeout(() => this.handleAddToCart(form), 100);
+        const btn = e.target.closest('[data-add-to-cart], button[type="submit"]');
+        if (btn && /add to (cart|bag)/i.test(btn.textContent)) {
+          this.trigger(btn);
         }
       });
     }
 
-    isAddToCartButton(element) {
-      const text = element.textContent.toLowerCase();
-      return text.includes('add to cart') || text.includes('add to bag') || element.hasAttribute('data-add-to-cart');
+    trigger(btn) {
+      if (this.config.animationKey) this.playAnimation(btn);
+      if (this.config.soundKey) this.playSound(this.config.soundKey);
     }
 
-    isAddToCartForm(form) {
-      const submitButton = form.querySelector('button[type="submit"]');
-      if (!submitButton) return false;
-      const text = submitButton.textContent.toLowerCase();
-      return text.includes('add to cart') || text.includes('add to bag');
-    }
-
-    async handleAddToCart(element) {
-      try {
-        const productElement = element.closest('[data-product]') || document.querySelector('[data-product]');
-        if (!productElement) return;
-
-        const productId = this.extractProductId(productElement);
-        if (!productId) return;
-
-        // Fetch animation config from server
-        const config = await this.fetchAnimationConfig(productId);
-        if (!config) return;
-
-        // Play animation
-        if (config.animationKey) {
-          this.playAnimation(config.animationKey, productElement);
-        }
-
-        // Play sound
-        if (config.soundKey) {
-          this.playSound(config.soundKey, config.volume || 0.8);
-        }
-      } catch (error) {
-        console.error('[FlyToCartPro] Error in handleAddToCart:', error);
-      }
-    }
-
-    async fetchAnimationConfig(productId) {
-      try {
-        const response = await fetch('/api/animation-config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productId }),
-        });
-
-        if (!response.ok) return null;
-        return await response.json();
-      } catch (error) {
-        console.error('[FlyToCartPro] Failed to fetch animation config:', error);
-        return null;
-      }
-    }
-
-    playAnimation(animationType, productElement) {
-      if (!this.gsapLoaded || !window.gsap) {
-        console.warn('[FlyToCartPro] GSAP not loaded');
-        return;
-      }
-
-      const clone = this.createProductClone(productElement);
-      if (!clone) return;
+    playAnimation(btn) {
+      if (!this.gsapLoaded || !window.gsap) return;
+      const el = btn.closest('[data-product]') || btn;
+      const clone = el.cloneNode(true);
+      const rect = el.getBoundingClientRect();
+      Object.assign(clone.style, {
+        position: 'fixed',
+        left: rect.left + 'px',
+        top: rect.top + 'px',
+        width: rect.width + 'px',
+        height: rect.height + 'px',
+        pointerEvents: 'none',
+        zIndex: '9999',
+        margin: '0',
+      });
+      document.body.appendChild(clone);
 
       const animations = {
-        slide_in: () => this.animateSlideIn(clone),
-        bounce: () => this.animateBounce(clone),
-        flip: () => this.animateFlip(clone),
-        pulse: () => this.animatePulse(),
-        spiral: () => this.animateSpiral(clone),
+        slide_in: () => gsap.to(clone, { duration: 1, x: 120, y: -120, opacity: 0, ease: 'power2.inOut', onComplete: () => clone.remove() }),
+        bounce:   () => gsap.timeline().to(clone, { duration: 0.4, y: -30, ease: 'power1.out' }).to(clone, { duration: 0.3, y: 10, ease: 'bounce.out' }).to(clone, { duration: 0.3, x: 120, y: -120, opacity: 0, onComplete: () => clone.remove() }),
+        flip:     () => gsap.timeline().to(clone, { duration: 0.7, rotationY: 360 }).to(clone, { duration: 0.3, x: 120, y: -120, opacity: 0, onComplete: () => clone.remove() }),
+        pulse:    () => { clone.remove(); const cart = document.querySelector('[data-cart-icon], .cart-icon'); if (cart) gsap.timeline().to(cart, { duration: 0.3, scale: 1.2 }).to(cart, { duration: 0.3, scale: 1 }); },
+        spiral:   () => gsap.to(clone, { duration: 1.2, x: 120, y: -120, rotationZ: 360, opacity: 0, ease: 'power2.inOut', onComplete: () => clone.remove() }),
       };
 
-      const animateFn = animations[animationType];
-      if (animateFn) {
-        animateFn();
-      }
+      const fn = animations[this.config.animationKey];
+      if (fn) fn(); else clone.remove();
     }
 
-    animateSlideIn(element) {
-      gsap.to(element, {
-        duration: 1,
-        x: 100,
-        y: -100,
-        opacity: 0,
-        ease: 'power2.inOut',
-        onComplete: () => element.remove(),
-      });
-    }
-
-    animateBounce(element) {
-      gsap
-        .timeline()
-        .to(element, { duration: 0.4, y: -30, ease: 'power1.out' }, 0)
-        .to(element, { duration: 0.3, y: 10, ease: 'bounce.out' })
-        .to(element, { duration: 0.3, x: 100, y: -100, opacity: 0, onComplete: () => element.remove() });
-    }
-
-    animateFlip(element) {
-      gsap
-        .timeline()
-        .to(element, { duration: 0.7, rotationY: 360 }, 0)
-        .to(element, { duration: 0.3, x: 100, y: -100, opacity: 0, onComplete: () => element.remove() });
-    }
-
-    animatePulse() {
-      const cartIcon = document.querySelector('[data-cart-icon]') || document.querySelector('.cart-icon');
-      if (!cartIcon) return;
-
-      gsap.timeline().to(cartIcon, { duration: 0.3, scale: 1.2 }).to(cartIcon, { duration: 0.3, scale: 1 });
-    }
-
-    animateSpiral(element) {
-      gsap.to(element, {
-        duration: 1.2,
-        x: 100,
-        y: -100,
-        rotationZ: 360,
-        opacity: 0,
-        ease: 'power2.inOut',
-        onComplete: () => element.remove(),
-      });
-    }
-
-    createProductClone(productElement) {
-      try {
-        const clone = productElement.cloneNode(true);
-        clone.style.position = 'fixed';
-        clone.style.pointerEvents = 'none';
-        clone.style.zIndex = '9999';
-        clone.style.width = productElement.offsetWidth + 'px';
-        clone.style.height = productElement.offsetHeight + 'px';
-
-        const rect = productElement.getBoundingClientRect();
-        clone.style.left = rect.left + 'px';
-        clone.style.top = rect.top + 'px';
-
-        document.body.appendChild(clone);
-        return clone;
-      } catch (error) {
-        console.error('[FlyToCartPro] Failed to create product clone:', error);
-        return null;
-      }
-    }
-
-    async playSound(soundType, volume = 0.8) {
+    playSound(soundKey) {
       try {
         if (!this.audioContext) {
-          const AudioContext = window.AudioContext || window.webkitAudioContext;
-          this.audioContext = new AudioContext();
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
 
-        const buffer = await this.getAudioBuffer(soundType);
-        if (!buffer) return;
+        const sounds = {
+          chime: () => [523, 659, 784].forEach((f, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = f; g.gain.setValueAtTime(0.3, now + i * 0.1); g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.2); o.start(now + i * 0.1); o.stop(now + i * 0.1 + 0.2); }),
+          whoosh: () => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(400, now); o.frequency.exponentialRampToValueAtTime(100, now + 0.4); g.gain.setValueAtTime(0.3, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.4); o.start(now); o.stop(now + 0.4); },
+          pop:    () => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(150, now); o.frequency.exponentialRampToValueAtTime(50, now + 0.1); g.gain.setValueAtTime(0.4, now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.1); o.start(now); o.stop(now + 0.1); },
+          bell:   () => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 800; g.gain.setValueAtTime(0.3, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.7); o.start(now); o.stop(now + 0.7); },
+          sparkle:() => [0,1,2].forEach(i => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 1000 + i * 300; g.gain.setValueAtTime(0.2, now + i * 0.15); g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.15); o.start(now + i * 0.15); o.stop(now + i * 0.15 + 0.15); }),
+        };
 
-        const source = this.audioContext.createBufferSource();
-        source.buffer = buffer;
-
-        const gainNode = this.audioContext.createGain();
-        gainNode.gain.value = Math.min(volume, 1);
-
-        source.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-
-        source.start(0);
-      } catch (error) {
-        console.error('[FlyToCartPro] Failed to play sound:', error);
+        const fn = sounds[soundKey];
+        if (fn) fn();
+      } catch (e) {
+        console.error('[FlyToCartPro] Sound error:', e);
       }
-    }
-
-    async getAudioBuffer(soundType) {
-      if (this.soundCache.has(soundType)) {
-        return this.soundCache.get(soundType);
-      }
-
-      try {
-        const url = `/sounds/${soundType}.mp3`;
-        const response = await fetch(url);
-        const arrayBuffer = await response.arrayBuffer();
-
-        const buffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        this.soundCache.set(soundType, buffer);
-        return buffer;
-      } catch (error) {
-        console.error(`[FlyToCartPro] Failed to load audio: ${soundType}`, error);
-        return null;
-      }
-    }
-
-    extractProductId(element) {
-      return element.dataset.productId || element.dataset.product || element.getAttribute('data-product-id') || '';
     }
   }
 
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      window.flyToCartPro = new FlyToCartPro();
-      console.log('[FlyToCartPro] ✅ Initialized');
-    });
-  } else {
-    window.flyToCartPro = new FlyToCartPro();
-    console.log('[FlyToCartPro] ✅ Initialized');
+  if (window.FlyToCartConfig.animationKey || window.FlyToCartConfig.soundKey) {
+    window.flyToCartPro = new FlyToCartPro(window.FlyToCartConfig);
   }
 </script>
+{% endif %}
 
 {% schema %}
 {
