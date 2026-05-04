@@ -124,7 +124,7 @@ export default function ConfigurePage() {
 
   return (
     <s-page heading="Configure Animation">
-      <s-button slot="primary-action" onClick={() => (window.location.href = "/app/my-animations")} variant="secondary">
+      <s-button slot="primary-action" onClick={() => (window.location.href = "/app/animations")} variant="secondary">
         My Animations
       </s-button>
       <s-button slot="secondary-action" onClick={() => (window.location.href = "/app")}>
