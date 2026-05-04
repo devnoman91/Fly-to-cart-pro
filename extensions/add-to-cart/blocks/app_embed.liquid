@@ -2,8 +2,18 @@
   Fly-to-Cart Pro App Embed Block
 {% endcomment %}
 
-{% assign animation_key = shop.metafields.fly_to_cart.animation_key.value %}
-{% assign sound_key = shop.metafields.fly_to_cart.sound_key.value %}
+{% assign ftc_configs_raw = shop.metafields.fly_to_cart.configurations.value %}
+{% assign animation_key = '' %}
+{% assign sound_key = '' %}
+{% if ftc_configs_raw != blank %}
+  {% assign ftc_configs = ftc_configs_raw %}
+  {% for cfg in ftc_configs %}
+    {% if cfg.live == true %}
+      {% assign animation_key = cfg.animationKey %}
+      {% assign sound_key = cfg.soundKey %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
 
 {% if animation_key != blank or sound_key != blank %}
 <script>

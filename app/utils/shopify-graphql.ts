@@ -236,31 +236,40 @@ export async function createSoundPreset(admin: any, data: any) {
   return result.metaobjectCreate;
 }
 
-export async function fetchGlobalConfig(admin: any) {
+export type FtcConfig = {
+  id: string;
+  animationKey: string;
+  soundKey: string;
+  live: boolean;
+};
+
+async function getShopId(admin: any): Promise<string> {
+  const result = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
+  return result.shop.id;
+}
+
+export async function fetchConfigurations(admin: any): Promise<FtcConfig[]> {
   const query = `
     query {
       shop {
-        id
-        animationKey: metafield(namespace: "fly_to_cart", key: "animation_key") { value }
-        soundKey: metafield(namespace: "fly_to_cart", key: "sound_key") { value }
+        metafield(namespace: "fly_to_cart", key: "configurations") { value }
       }
     }
   `;
-
   const result = await executeGraphQL<{ shop: any }>(admin, query);
-  const { animationKey, soundKey } = result.shop;
-  if (!animationKey && !soundKey) return null;
-  return {
-    animationKey: animationKey?.value || null,
-    soundKey: soundKey?.value || null,
-  };
+  const raw = result.shop?.metafield?.value;
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as FtcConfig[];
+  } catch {
+    return [];
+  }
 }
 
-export async function saveGlobalConfig(admin: any, config: any) {
-  const shopResult = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
-  const shopId = shopResult.shop.id;
-
-  console.log(`[FlyToCart] saveGlobalConfig — shopId: ${shopId}, animationKey: ${config.animationKey}, soundKey: ${config.soundKey}`);
+export async function saveConfigurations(admin: any, configs: FtcConfig[]): Promise<void> {
+  const shopId = await getShopId(admin);
+  console.log(`[FlyToCart] saveConfigurations — shopId: ${shopId}, count: ${configs.length}`);
+  console.log(`[FlyToCart] saveConfigurations — data:`, JSON.stringify(configs));
 
   const query = `
     mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -272,33 +281,38 @@ export async function saveGlobalConfig(admin: any, config: any) {
   `;
 
   const result = await executeGraphQL<any>(admin, query, {
-    metafields: [
-      {
-        ownerId: shopId,
-        namespace: "fly_to_cart",
-        key: "animation_key",
-        type: "single_line_text_field",
-        value: config.animationKey,
-      },
-      {
-        ownerId: shopId,
-        namespace: "fly_to_cart",
-        key: "sound_key",
-        type: "single_line_text_field",
-        value: config.soundKey,
-      },
-    ],
+    metafields: [{
+      ownerId: shopId,
+      namespace: "fly_to_cart",
+      key: "configurations",
+      type: "json",
+      value: JSON.stringify(configs),
+    }],
   });
 
   const { metafields, userErrors } = result.metafieldsSet ?? {};
-
   if (userErrors?.length > 0) {
-    console.error(`[FlyToCart] saveGlobalConfig — userErrors:`, JSON.stringify(userErrors));
+    console.error(`[FlyToCart] saveConfigurations — userErrors:`, JSON.stringify(userErrors));
     throw new Error(userErrors.map((e: any) => e.message).join(', '));
   }
+  console.log(`[FlyToCart] saveConfigurations — stored:`, JSON.stringify(metafields));
+}
 
-  console.log(`[FlyToCart] saveGlobalConfig — stored metafields:`, JSON.stringify(metafields));
-  return result.metafieldsSet;
+export async function fetchGlobalConfig(admin: any) {
+  const configs = await fetchConfigurations(admin);
+  const live = configs.find((c) => c.live);
+  return live ? { animationKey: live.animationKey, soundKey: live.soundKey } : null;
+}
+
+export async function saveGlobalConfig(admin: any, config: any) {
+  const configs = await fetchConfigurations(admin);
+  const id = Date.now().toString();
+  const updated: FtcConfig[] = [
+    ...configs.map((c) => ({ ...c, live: false })),
+    { id, animationKey: config.animationKey, soundKey: config.soundKey, live: true },
+  ];
+  await saveConfigurations(admin, updated);
+  return updated;
 }
 
 export async function fetchGlobalSettings(admin: any) {
