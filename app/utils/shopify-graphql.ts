@@ -260,10 +260,12 @@ export async function saveGlobalConfig(admin: any, config: any) {
   const shopResult = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
   const shopId = shopResult.shop.id;
 
+  console.log(`[FlyToCart] saveGlobalConfig — shopId: ${shopId}, animationKey: ${config.animationKey}, soundKey: ${config.soundKey}`);
+
   const query = `
     mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
       metafieldsSet(metafields: $metafields) {
-        metafields { key value }
+        metafields { key value namespace }
         userErrors { field message code }
       }
     }
@@ -288,10 +290,14 @@ export async function saveGlobalConfig(admin: any, config: any) {
     ],
   });
 
-  if (result.metafieldsSet?.userErrors?.length > 0) {
-    throw new Error(result.metafieldsSet.userErrors.map((e: any) => e.message).join(', '));
+  const { metafields, userErrors } = result.metafieldsSet ?? {};
+
+  if (userErrors?.length > 0) {
+    console.error(`[FlyToCart] saveGlobalConfig — userErrors:`, JSON.stringify(userErrors));
+    throw new Error(userErrors.map((e: any) => e.message).join(', '));
   }
 
+  console.log(`[FlyToCart] saveGlobalConfig — stored metafields:`, JSON.stringify(metafields));
   return result.metafieldsSet;
 }
 

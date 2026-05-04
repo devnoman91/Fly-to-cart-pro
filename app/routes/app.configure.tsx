@@ -159,12 +159,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return { success: false, error: "Invalid animation or sound selection" };
     }
 
-    await saveGlobalConfig(admin, {
+    const saved = await saveGlobalConfig(admin, {
       animationKey: animation.key,
       soundKey: sound.key,
     });
 
-    console.log("[FlyToCart] Config saved successfully");
+    console.log("[FlyToCart] Config saved successfully — response:", JSON.stringify(saved));
     return { success: true, error: null };
   } catch (error: any) {
     const detail = error?.message || String(error);
