@@ -1,29 +1,26 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigation, useSubmit } from "react-router";
-import { useState } from "react";
+import { useLoaderData, useActionData, useNavigation } from "react-router";
+import { useState, useEffect } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate, unauthenticated } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
-import {
-  fetchConfigurations,
-  saveConfigurations,
-  type FtcConfig,
-} from "../utils/shopify-graphql";
+import { fetchConfigurations, saveConfigurations, type FtcConfig } from "../utils/shopify-graphql";
 
 const ANIMATIONS = [
-  { key: "slide_in", name: "Slide In" },
-  { key: "bounce",   name: "Bounce"   },
-  { key: "flip",     name: "Flip"     },
-  { key: "pulse",    name: "Pulse"    },
-  { key: "spiral",   name: "Spiral"   },
+  { key: "slide_in", name: "Slide In",  desc: "Product slides smoothly to cart",       emoji: "➡️"  },
+  { key: "bounce",   name: "Bounce",    desc: "Product bounces elastically to cart",    emoji: "🏀"  },
+  { key: "flip",     name: "Flip",      desc: "Product rotates 360° while flying",      emoji: "🔄"  },
+  { key: "pulse",    name: "Pulse",     desc: "Cart icon pulses when item is added",    emoji: "💫"  },
+  { key: "spiral",   name: "Spiral",    desc: "Product spirals upward to cart",         emoji: "🌀"  },
 ];
 
 const SOUNDS = [
-  { key: "chime",   name: "Chime"   },
-  { key: "whoosh",  name: "Whoosh"  },
-  { key: "pop",     name: "Pop"     },
-  { key: "bell",    name: "Bell"    },
-  { key: "sparkle", name: "Sparkle" },
+  { key: "chime",   name: "Chime",   desc: "Pleasant notification chime",   emoji: "🔔" },
+  { key: "whoosh",  name: "Whoosh",  desc: "Smooth swoosh transition",      emoji: "💨" },
+  { key: "pop",     name: "Pop",     desc: "Playful bubble pop",            emoji: "🫧" },
+  { key: "bell",    name: "Bell",    desc: "Classic ringing bell",          emoji: "🛎️" },
+  { key: "sparkle", name: "Sparkle", desc: "Magical tinkling effect",       emoji: "✨" },
 ];
 
 async function getAdmin(request: Request) {
@@ -45,7 +42,7 @@ async function getAdmin(request: Request) {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const admin = await getAdmin(request);
   const configs = await fetchConfigurations(admin);
-  return { configs, animations: ANIMATIONS, sounds: SOUNDS };
+  return { configs };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -55,242 +52,224 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     admin = await getAdmin(request);
   } catch (err: any) {
-    return { success: false, error: "Authentication failed", detail: err?.message };
+    return { success: false, error: "Authentication failed" };
   }
 
   try {
     const formData = await request.formData();
-    const _action = formData.get("_action") as string;
+    const animationKey = formData.get("animationKey") as string;
+    const soundKey     = formData.get("soundKey") as string;
+
+    if (!animationKey || !soundKey) return { success: false, error: "Select both animation and sound" };
+
     const configs = await fetchConfigurations(admin);
-
-    if (_action === "add") {
-      const animationKey = formData.get("animationKey") as string;
-      const soundKey = formData.get("soundKey") as string;
-      if (!animationKey || !soundKey) return { success: false, error: "Select both animation and sound" };
-      const newConfig: FtcConfig = { id: Date.now().toString(), animationKey, soundKey, live: false };
-      const updated = [...configs, newConfig];
-      await saveConfigurations(admin, updated);
-      console.log(`[FlyToCart] Added config — animation: ${animationKey}, sound: ${soundKey}`);
-      return { success: true, error: null };
-    }
-
-    if (_action === "setLive") {
-      const id = formData.get("id") as string;
-      const updated = configs.map((c) => ({ ...c, live: c.id === id }));
-      await saveConfigurations(admin, updated);
-      console.log(`[FlyToCart] Set live — id: ${id}`);
-      return { success: true, error: null };
-    }
-
-    if (_action === "stop") {
-      const updated = configs.map((c) => ({ ...c, live: false }));
-      await saveConfigurations(admin, updated);
-      console.log(`[FlyToCart] Stopped all configs`);
-      return { success: true, error: null };
-    }
-
-    if (_action === "delete") {
-      const id = formData.get("id") as string;
-      const updated = configs.filter((c) => c.id !== id);
-      await saveConfigurations(admin, updated);
-      console.log(`[FlyToCart] Deleted config — id: ${id}`);
-      return { success: true, error: null };
-    }
-
-    return { success: false, error: "Unknown action" };
+    const newConfig: FtcConfig = {
+      id: Date.now().toString(),
+      animationKey,
+      soundKey,
+      live: false,
+    };
+    await saveConfigurations(admin, [...configs, newConfig]);
+    console.log(`[FlyToCart] Added config — animation: ${animationKey}, sound: ${soundKey}`);
+    return { success: true, error: null };
   } catch (err: any) {
-    console.error("[FlyToCart] Action failed:", err?.message);
-    return { success: false, error: err?.message || "Action failed" };
+    console.error("[FlyToCart] Add failed:", err?.message);
+    return { success: false, error: err?.message || "Failed to save" };
   }
 };
 
 export default function ConfigurePage() {
-  const { configs, animations, sounds } = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const submit = useSubmit();
+  useLoaderData<typeof loader>();
+  const actionData  = useActionData<typeof action>();
+  const navigation  = useNavigation();
+  const shopify     = useAppBridge();
+  const isSaving    = navigation.state === "submitting";
 
-  const [selectedAnimation, setSelectedAnimation] = useState(animations[0].key);
-  const [selectedSound, setSelectedSound] = useState(sounds[0].key);
-  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
+  const [selectedSound,     setSelectedSound]      = useState<string | null>(null);
+  const [isPlaying,         setIsPlaying]          = useState(false);
 
-  const isBusy = navigation.state === "submitting";
+  useEffect(() => {
+    if (!actionData) return;
+    if (actionData.success) {
+      shopify.toast.show("Animation added! Go to My Animations to set it live.", { duration: 4000 });
+    } else if (actionData.success === false && actionData.error) {
+      shopify.toast.show(actionData.error, { isError: true, duration: 5000 });
+    }
+  }, [actionData]);
 
-  const animName = (key: string) => animations.find((a) => a.key === key)?.name ?? key;
-  const sndName  = (key: string) => sounds.find((s) => s.key === key)?.name ?? key;
+  const canAdd = selectedAnimation && selectedSound;
 
-  const liveConfig = configs.find((c) => c.live);
-
-  const doAction = (data: Record<string, string>) => {
-    const fd = new FormData();
-    Object.entries(data).forEach(([k, v]) => fd.append(k, v));
-    submit(fd, { method: "POST" });
-  };
-
-  const playSound = (soundKey: string, id: string) => {
-    setPlayingId(id);
+  const playSound = (soundKey: string) => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const now = ctx.currentTime;
-      const sounds: Record<string, () => void> = {
+      const map: Record<string, () => void> = {
         chime:   () => [523,659,784].forEach((f,i) => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=f; g.gain.setValueAtTime(0.3,now+i*0.1); g.gain.exponentialRampToValueAtTime(0.01,now+i*0.1+0.2); o.start(now+i*0.1); o.stop(now+i*0.1+0.2); }),
         whoosh:  () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(400,now); o.frequency.exponentialRampToValueAtTime(100,now+0.4); g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.01,now+0.4); o.start(now); o.stop(now+0.4); },
         pop:     () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(150,now); o.frequency.exponentialRampToValueAtTime(50,now+0.1); g.gain.setValueAtTime(0.4,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.1); o.start(now); o.stop(now+0.1); },
         bell:    () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=800; g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.01,now+0.7); o.start(now); o.stop(now+0.7); },
         sparkle: () => [0,1,2].forEach(i => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=1000+i*300; g.gain.setValueAtTime(0.2,now+i*0.15); g.gain.exponentialRampToValueAtTime(0.01,now+i*0.15+0.15); o.start(now+i*0.15); o.stop(now+i*0.15+0.15); }),
       };
-      sounds[soundKey]?.();
+      map[soundKey]?.();
     } catch {}
-    setTimeout(() => setPlayingId(null), 700);
+  };
+
+  const handlePreview = () => {
+    if (!selectedAnimation || !selectedSound) return;
+    setIsPlaying(true);
+    playSound(selectedSound);
+    setTimeout(() => setIsPlaying(false), 1000);
   };
 
   return (
-    <s-page heading="Fly to Cart — Configurations">
-      <s-button slot="primary-action" onClick={() => (window.location.href = "/app")}>
+    <s-page heading="Configure Animation">
+      <s-button slot="primary-action" onClick={() => (window.location.href = "/app/my-animations")} variant="secondary">
+        My Animations
+      </s-button>
+      <s-button slot="secondary-action" onClick={() => (window.location.href = "/app")}>
         Back
       </s-button>
 
-      {/* Status bar */}
-      <s-section heading="Active Configuration">
+      {/* Step 1: Animation */}
+      <s-section heading="Step 1 — Choose Animation">
         <s-box padding="base">
-          {liveConfig ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "20px" }}>🟢</span>
-              <div>
-                <strong>{animName(liveConfig.animationKey)}</strong> + <strong>{sndName(liveConfig.soundKey)}</strong>
-                <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>Live on your store</div>
-              </div>
-              <button
-                disabled={isBusy}
-                onClick={() => doAction({ _action: "stop" })}
-                style={{ marginLeft: "auto", padding: "6px 16px", background: "#dc3545", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
-              >
-                Stop
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "20px" }}>⚪</span>
-              <span style={{ color: "#666" }}>No configuration is live. Set one live from the table below.</span>
-            </div>
-          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+            {ANIMATIONS.map((anim) => {
+              const active = selectedAnimation === anim.key;
+              return (
+                <div
+                  key={anim.key}
+                  onClick={() => setSelectedAnimation(anim.key)}
+                  style={{
+                    padding: "16px",
+                    border: active ? "2px solid #0066cc" : "2px solid #e0e0e0",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    background: active ? "#f0f6ff" : "#fff",
+                    textAlign: "center",
+                    transition: "all 0.15s",
+                    userSelect: "none",
+                  }}
+                >
+                  <div style={{ fontSize: "32px", marginBottom: "8px" }}>{anim.emoji}</div>
+                  <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{anim.name}</div>
+                  <div style={{ fontSize: "12px", color: "#666" }}>{anim.desc}</div>
+                  {active && <div style={{ marginTop: "8px", fontSize: "11px", color: "#0066cc", fontWeight: 600 }}>✓ Selected</div>}
+                </div>
+              );
+            })}
+          </div>
         </s-box>
       </s-section>
 
-      {/* Configurations table */}
-      <s-section heading="Saved Configurations">
+      {/* Step 2: Sound */}
+      <s-section heading="Step 2 — Choose Sound">
         <s-box padding="base">
-          {configs.length === 0 ? (
-            <div style={{ padding: "32px", textAlign: "center", color: "#888" }}>
-              No configurations yet. Add one below.
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-                <thead>
-                  <tr style={{ background: "#f4f4f4", textAlign: "left" }}>
-                    <th style={th}>Animation</th>
-                    <th style={th}>Sound</th>
-                    <th style={th}>Preview</th>
-                    <th style={th}>Status</th>
-                    <th style={th}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {configs.map((cfg) => (
-                    <tr key={cfg.id} style={{ borderBottom: "1px solid #e0e0e0", background: cfg.live ? "#f0fff4" : "#fff" }}>
-                      <td style={td}>{animName(cfg.animationKey)}</td>
-                      <td style={td}>{sndName(cfg.soundKey)}</td>
-                      <td style={td}>
-                        <button
-                          onClick={() => playSound(cfg.soundKey, cfg.id)}
-                          style={{ padding: "4px 10px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", background: playingId === cfg.id ? "#e0f0ff" : "#fff" }}
-                        >
-                          {playingId === cfg.id ? "♪" : "▶ Play"}
-                        </button>
-                      </td>
-                      <td style={td}>
-                        {cfg.live ? (
-                          <span style={{ color: "#28a745", fontWeight: 600 }}>🟢 Live</span>
-                        ) : (
-                          <span style={{ color: "#999" }}>⚪ Stopped</span>
-                        )}
-                      </td>
-                      <td style={{ ...td, display: "flex", gap: "8px" }}>
-                        {!cfg.live && (
-                          <button
-                            disabled={isBusy}
-                            onClick={() => doAction({ _action: "setLive", id: cfg.id })}
-                            style={{ padding: "4px 12px", background: "#28a745", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}
-                          >
-                            Set Live
-                          </button>
-                        )}
-                        <button
-                          disabled={isBusy}
-                          onClick={() => doAction({ _action: "delete", id: cfg.id })}
-                          style={{ padding: "4px 12px", background: "#fff", color: "#dc3545", border: "1px solid #dc3545", borderRadius: "4px", cursor: "pointer" }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+            {SOUNDS.map((snd) => {
+              const active = selectedSound === snd.key;
+              return (
+                <div
+                  key={snd.key}
+                  onClick={() => { setSelectedSound(snd.key); playSound(snd.key); }}
+                  style={{
+                    padding: "16px",
+                    border: active ? "2px solid #0066cc" : "2px solid #e0e0e0",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    background: active ? "#f0f6ff" : "#fff",
+                    textAlign: "center",
+                    transition: "all 0.15s",
+                    userSelect: "none",
+                  }}
+                >
+                  <div style={{ fontSize: "32px", marginBottom: "8px" }}>{snd.emoji}</div>
+                  <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{snd.name}</div>
+                  <div style={{ fontSize: "12px", color: "#666" }}>{snd.desc}</div>
+                  {active && <div style={{ marginTop: "8px", fontSize: "11px", color: "#0066cc", fontWeight: 600 }}>✓ Selected</div>}
+                </div>
+              );
+            })}
+          </div>
         </s-box>
       </s-section>
 
-      {/* Add new configuration */}
-      <s-section heading="Add New Configuration">
-        <s-box padding="base">
-          <form method="POST">
-            <input type="hidden" name="_action" value="add" />
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", alignItems: "flex-end" }}>
-              <div>
-                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "6px" }}>Animation</div>
-                <select
-                  name="animationKey"
-                  value={selectedAnimation}
-                  onChange={(e) => setSelectedAnimation(e.target.value)}
-                  style={selectStyle}
-                >
-                  {animations.map((a) => (
-                    <option key={a.key} value={a.key}>{a.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div style={{ fontSize: "13px", fontWeight: 600, marginBottom: "6px" }}>Sound</div>
-                <select
-                  name="soundKey"
-                  value={selectedSound}
-                  onChange={(e) => setSelectedSound(e.target.value)}
-                  style={selectStyle}
-                >
-                  {sounds.map((s) => (
-                    <option key={s.key} value={s.key}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="submit"
-                disabled={isBusy}
-                style={{ padding: "8px 24px", background: "#0066cc", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", height: "38px" }}
+      {/* Step 3: Preview + Save */}
+      {canAdd && (
+        <s-section heading="Step 3 — Preview & Save">
+          <s-box padding="base">
+            <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
+              {/* Preview box */}
+              <div
+                style={{
+                  flex: "0 0 auto",
+                  width: "160px",
+                  height: "160px",
+                  background: "#f9f9f9",
+                  border: "2px dashed #ccc",
+                  borderRadius: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                }}
+                onClick={handlePreview}
               >
-                {isBusy ? "Saving..." : "+ Add"}
-              </button>
+                <div style={{ fontSize: "48px", animation: isPlaying ? "ftcBounce 0.5s infinite" : "none" }}>🛒</div>
+                <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>{isPlaying ? "Playing..." : "▶ Click to preview"}</div>
+              </div>
+
+              {/* Summary + save */}
+              <div style={{ flex: 1 }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <div style={{ fontSize: "13px", color: "#666", marginBottom: "4px" }}>Selected combination</div>
+                  <div style={{ fontSize: "16px", fontWeight: 600 }}>
+                    {ANIMATIONS.find(a => a.key === selectedAnimation)?.emoji}{" "}
+                    {ANIMATIONS.find(a => a.key === selectedAnimation)?.name}
+                    {" + "}
+                    {SOUNDS.find(s => s.key === selectedSound)?.emoji}{" "}
+                    {SOUNDS.find(s => s.key === selectedSound)?.name}
+                  </div>
+                </div>
+                <form method="POST">
+                  <input type="hidden" name="animationKey" value={selectedAnimation ?? ""} />
+                  <input type="hidden" name="soundKey"     value={selectedSound ?? ""} />
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    style={{
+                      padding: "10px 28px",
+                      background: isSaving ? "#999" : "#0066cc",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontSize: "14px",
+                      fontWeight: 600,
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isSaving ? "Saving..." : "Add to My Animations"}
+                  </button>
+                  <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>
+                    Then go to My Animations to set it live on your store
+                  </div>
+                </form>
+              </div>
             </div>
-          </form>
-        </s-box>
-      </s-section>
+          </s-box>
+
+          <style>{`
+            @keyframes ftcBounce {
+              0%, 100% { transform: scale(1); }
+              50%       { transform: scale(1.15); }
+            }
+          `}</style>
+        </s-section>
+      )}
     </s-page>
   );
 }
-
-const th: React.CSSProperties = { padding: "10px 14px", fontWeight: 600, borderBottom: "2px solid #e0e0e0" };
-const td: React.CSSProperties = { padding: "10px 14px", verticalAlign: "middle" };
-const selectStyle: React.CSSProperties = { padding: "8px 12px", border: "1px solid #ccc", borderRadius: "4px", fontSize: "14px", minWidth: "140px" };
 
 export const headers = (headersArgs: any) => boundary.headers(headersArgs);
