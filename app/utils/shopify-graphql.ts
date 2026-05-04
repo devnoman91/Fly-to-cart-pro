@@ -1,5 +1,3 @@
-import { json } from '@react-router/node';
-
 interface GraphQLResponse<T> {
   data?: T;
   errors?: Array<{ message: string }>;
@@ -157,8 +155,8 @@ export async function updateProductAnimation(
 
 export async function createAnimationPreset(admin: any, data: any) {
   const query = `
-    mutation createMetaobject($input: MetaobjectInput!) {
-      metaobjectCreate(input: $input) {
+    mutation createAnimationPreset($metaobject: MetaobjectCreateInput!) {
+      metaobjectCreate(metaobject: $metaobject) {
         metaobject {
           id
           handle
@@ -170,13 +168,14 @@ export async function createAnimationPreset(admin: any, data: any) {
         userErrors {
           field
           message
+          code
         }
       }
     }
   `;
 
   const result = await executeGraphQL<any>(admin, query, {
-    input: {
+    metaobject: {
       type: 'ftc_animation_preset',
       fields: [
         { key: 'animation_name', value: data.name },
@@ -188,13 +187,17 @@ export async function createAnimationPreset(admin: any, data: any) {
     },
   });
 
+  if (result.metaobjectCreate?.userErrors?.length > 0) {
+    throw new Error(result.metaobjectCreate.userErrors.map((e: any) => e.message).join(', '));
+  }
+
   return result.metaobjectCreate;
 }
 
 export async function createSoundPreset(admin: any, data: any) {
   const query = `
-    mutation createMetaobject($input: MetaobjectInput!) {
-      metaobjectCreate(input: $input) {
+    mutation createSoundPreset($metaobject: MetaobjectCreateInput!) {
+      metaobjectCreate(metaobject: $metaobject) {
         metaobject {
           id
           handle
@@ -206,18 +209,19 @@ export async function createSoundPreset(admin: any, data: any) {
         userErrors {
           field
           message
+          code
         }
       }
     }
   `;
 
   const result = await executeGraphQL<any>(admin, query, {
-    input: {
+    metaobject: {
       type: 'ftc_sound_preset',
       fields: [
         { key: 'sound_name', value: data.name },
         { key: 'sound_key', value: data.key },
-        { key: 'file_url', value: data.fileUrl },
+        { key: 'file_url', value: data.fileUrl || '' },
         { key: 'duration_ms', value: String(data.duration) },
         { key: 'volume', value: String(data.volume) },
         { key: 'enabled', value: String(data.enabled) },
@@ -225,7 +229,67 @@ export async function createSoundPreset(admin: any, data: any) {
     },
   });
 
+  if (result.metaobjectCreate?.userErrors?.length > 0) {
+    throw new Error(result.metaobjectCreate.userErrors.map((e: any) => e.message).join(', '));
+  }
+
   return result.metaobjectCreate;
+}
+
+export async function fetchGlobalConfig(admin: any) {
+  const query = `
+    query {
+      shop {
+        metafield(namespace: "app", key: "ftc_global_settings") {
+          value
+        }
+      }
+    }
+  `;
+
+  const result = await executeGraphQL<{ shop: any }>(admin, query);
+  const metafield = result.shop?.metafield;
+  return metafield ? JSON.parse(metafield.value) : null;
+}
+
+export async function saveGlobalConfig(admin: any, config: any) {
+  // First get the shop GID needed for metafieldsSet
+  const shopResult = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
+  const shopId = shopResult.shop.id;
+
+  const query = `
+    mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields {
+          key
+          value
+        }
+        userErrors {
+          field
+          message
+          code
+        }
+      }
+    }
+  `;
+
+  const result = await executeGraphQL<any>(admin, query, {
+    metafields: [
+      {
+        ownerId: shopId,
+        namespace: "app",
+        key: "ftc_global_settings",
+        type: "json",
+        value: JSON.stringify(config),
+      },
+    ],
+  });
+
+  if (result.metafieldsSet?.userErrors?.length > 0) {
+    throw new Error(result.metafieldsSet.userErrors.map((e: any) => e.message).join(', '));
+  }
+
+  return result.metafieldsSet;
 }
 
 export async function fetchGlobalSettings(admin: any) {

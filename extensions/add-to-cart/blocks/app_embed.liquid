@@ -53,11 +53,7 @@
 
     isAddToCartButton(element) {
       const text = element.textContent.toLowerCase();
-      return (
-        text.includes('add to cart') ||
-        text.includes('add to bag') ||
-        element.hasAttribute('data-add-to-cart')
-      );
+      return text.includes('add to cart') || text.includes('add to bag') || element.hasAttribute('data-add-to-cart');
     }
 
     isAddToCartForm(form) {
@@ -162,10 +158,7 @@
       const cartIcon = document.querySelector('[data-cart-icon]') || document.querySelector('.cart-icon');
       if (!cartIcon) return;
 
-      gsap
-        .timeline()
-        .to(cartIcon, { duration: 0.3, scale: 1.2 })
-        .to(cartIcon, { duration: 0.3, scale: 1 });
+      gsap.timeline().to(cartIcon, { duration: 0.3, scale: 1.2 }).to(cartIcon, { duration: 0.3, scale: 1 });
     }
 
     animateSpiral(element) {
@@ -246,12 +239,7 @@
     }
 
     extractProductId(element) {
-      return (
-        element.dataset.productId ||
-        element.dataset.product ||
-        element.getAttribute('data-product-id') ||
-        ''
-      );
+      return element.dataset.productId || element.dataset.product || element.getAttribute('data-product-id') || '';
     }
   }
 

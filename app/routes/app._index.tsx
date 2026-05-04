@@ -1,42 +1,9 @@
 import type {
   HeadersFunction,
-  LoaderFunctionArgs,
 } from "react-router";
-import { useLoaderData } from "react-router";
-import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  fetchAnimationPresets,
-  fetchSoundPresets,
-  fetchProductsWithAnimations,
-} from "../utils/shopify-graphql";
-
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-
-  try {
-    const animations = await fetchAnimationPresets(admin);
-    const sounds = await fetchSoundPresets(admin);
-    const productsData = await fetchProductsWithAnimations(admin, 100);
-
-    return {
-      totalAnimations: animations.length,
-      totalSounds: sounds.length,
-      totalProducts: productsData.nodes?.length || 0,
-    };
-  } catch (error) {
-    console.error("Failed to fetch data:", error);
-    return {
-      totalAnimations: 0,
-      totalSounds: 0,
-      totalProducts: 0,
-    };
-  }
-};
 
 export default function Index() {
-  const { totalAnimations, totalSounds, totalProducts } =
-    useLoaderData<typeof loader>();
 
   return (
     <s-page heading="Fly To Cart Pro - Setup">
@@ -53,53 +20,24 @@ export default function Index() {
 
             <s-stack direction="block" gap="tight">
               <s-text variant="headingSm">How it works:</s-text>
-              <s-text>1. Pick your favorite animation style</s-text>
-              <s-text>2. Pick a sound effect</s-text>
-              <s-text>3. Apply to your products</s-text>
-              <s-text>4. Done! Animations play on add-to-cart</s-text>
+              <s-text>1. Choose your favorite animation and sound together</s-text>
+              <s-text>2. Preview how it looks and sounds</s-text>
+              <s-text>3. Done! Animations play when customers add to cart</s-text>
             </s-stack>
           </s-stack>
         </s-box>
       </s-section>
 
-      <s-section heading="Setup Your Store">
-        <s-box padding="loose">
+      <s-section heading="Get Started">
+        <s-box padding="loose" background="highlight">
           <s-stack direction="block" gap="base">
-            <div>
-              <s-text variant="headingSm">Step 1: Choose Animation Style</s-text>
-              <s-paragraph tone="subdued">
-                {totalAnimations > 0
-                  ? `${totalAnimations} animations available`
-                  : "No animations yet"}
-              </s-paragraph>
-              <s-button onClick={() => (window.location.href = "/app/animations")}>
-                Pick Animation
-              </s-button>
-            </div>
-
-            <div style={{ borderTop: "1px solid #e0e0e0", paddingTop: "16px" }}>
-              <s-text variant="headingSm">Step 2: Choose Sound Effect</s-text>
-              <s-paragraph tone="subdued">
-                {totalSounds > 0
-                  ? `${totalSounds} sounds available`
-                  : "No sounds yet"}
-              </s-paragraph>
-              <s-button onClick={() => (window.location.href = "/app/sounds")}>
-                Pick Sound
-              </s-button>
-            </div>
-
-            <div style={{ borderTop: "1px solid #e0e0e0", paddingTop: "16px" }}>
-              <s-text variant="headingSm">Step 3: Apply to Products</s-text>
-              <s-paragraph tone="subdued">
-                {totalProducts > 0
-                  ? `${totalProducts} products available`
-                  : "No products yet"}
-              </s-paragraph>
-              <s-button onClick={() => (window.location.href = "/app/products")}>
-                Configure Products
-              </s-button>
-            </div>
+            <s-text variant="headingMd">Ready to add magic to your store?</s-text>
+            <s-paragraph>
+              Select your preferred animation and sound, preview the effect, and apply it to your store in seconds.
+            </s-paragraph>
+            <s-button onClick={() => (window.location.href = "/app/configure")} style={{ backgroundColor: "#0066cc", color: "white" }}>
+              Configure Now
+            </s-button>
           </s-stack>
         </s-box>
       </s-section>
