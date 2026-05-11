@@ -1,10 +1,9 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import { useState, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { authenticate, unauthenticated } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import prisma from "../db.server";
 import { fetchConfigurations, saveConfigurations, type FtcConfig } from "../utils/shopify-graphql";
 
 const ANIMATIONS = [
@@ -23,24 +22,8 @@ const SOUNDS = [
   { key: "sparkle", name: "Sparkle", desc: "Magical tinkling effect",       emoji: "✨" },
 ];
 
-async function getAdmin(request: Request) {
-  try {
-    const { admin } = await authenticate.admin(request);
-    return admin;
-  } catch (err: any) {
-    if (err instanceof Response && err.status === 302) {
-      const sessions = await prisma.session.findMany({ take: 1, orderBy: { id: "desc" } });
-      if (sessions.length > 0 && sessions[0].shop) {
-        const { admin } = await unauthenticated.admin(sessions[0].shop);
-        return admin;
-      }
-    }
-    throw err;
-  }
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const admin = await getAdmin(request);
+  const { admin } = await authenticate.admin(request);
   const configs = await fetchConfigurations(admin);
   return { configs };
 };
@@ -48,12 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return { success: false, error: "Invalid method" };
 
-  let admin: any;
-  try {
-    admin = await getAdmin(request);
-  } catch (err: any) {
-    return { success: false, error: "Authentication failed" };
-  }
+  const { admin } = await authenticate.admin(request);
 
   try {
     const formData = await request.formData();
@@ -233,7 +211,7 @@ export default function ConfigurePage() {
                     {SOUNDS.find(s => s.key === selectedSound)?.name}
                   </div>
                 </div>
-                <form method="POST">
+                <Form method="POST">
                   <input type="hidden" name="animationKey" value={selectedAnimation ?? ""} />
                   <input type="hidden" name="soundKey"     value={selectedSound ?? ""} />
                   <button
@@ -255,7 +233,7 @@ export default function ConfigurePage() {
                   <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>
                     Then go to My Animations to set it live on your store
                   </div>
-                </form>
+                </Form>
               </div>
             </div>
           </s-box>

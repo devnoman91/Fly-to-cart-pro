@@ -32,3 +32,13 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model Subscription {
+  shop        String    @id
+  planName    String    @default("pro")
+  status      String    @default("pending")
+  trialEndsAt DateTime?
+  billingOn   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
