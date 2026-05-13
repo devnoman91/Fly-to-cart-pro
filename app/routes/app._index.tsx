@@ -14,9 +14,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const ANIMATION_NAMES: Record<string, string> = {
   slide_in: "Slide In", bounce: "Bounce", flip: "Flip", pulse: "Pulse", spiral: "Spiral",
+  zoom: "Zoom", shake: "Shake", float: "Float",
 };
 const SOUND_NAMES: Record<string, string> = {
   chime: "Chime", whoosh: "Whoosh", pop: "Pop", bell: "Bell", sparkle: "Sparkle",
+  coin: "Coin", laser: "Laser", drum: "Drum",
 };
 
 export default function Index() {
