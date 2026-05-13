@@ -1,85 +1,67 @@
 import React from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigation, useSubmit, useRouteError } from "react-router";
-import { authenticate } from "../shopify.server";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { fetchConfigurations, saveConfigurations } from "../utils/shopify-graphql";
-
-const ANIMATION_NAMES: Record<string, string> = {
-  slide_in: "Slide In",
-  bounce: "Bounce",
-  flip: "Flip",
-  pulse: "Pulse",
-  spiral: "Spiral",
-};
-
-const SOUND_NAMES: Record<string, string> = {
-  chime: "Chime",
-  whoosh: "Whoosh",
-  pop: "Pop",
-  bell: "Bell",
-  sparkle: "Sparkle",
-};
-
-const ANIMATION_ICON: Record<string, string> = {
-  slide_in: "➡️", bounce: "🏀", flip: "🔄", pulse: "💫", spiral: "🌀",
-};
-
-const SOUND_ICON: Record<string, string> = {
-  chime: "🔔", whoosh: "💨", pop: "🫧", bell: "🛎️", sparkle: "✨",
-};
-
-const ANIMATION_DESC: Record<string, string> = {
-  slide_in: "Slides the cart icon from the product",
-  bounce: "Bouncy spring effect on add to cart",
-  flip: "3D flip transition to cart",
-  pulse: "Pulsing glow effect",
-  spiral: "Spiral path to cart icon",
-};
+import { authenticate } from "../shopify.server";
+import { fetchConfigurations } from "../utils/shopify-graphql";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const configs = await fetchConfigurations(admin);
-  return { configs };
+  const liveConfig = configs.find((c) => c.live) ?? null;
+  return { liveConfig, totalCount: configs.length, shop: session?.shop };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  if (request.method !== "POST") return { success: false };
-  const { admin } = await authenticate.admin(request);
-
-  try {
-    const formData = await request.formData();
-    const _action = formData.get("_action") as string;
-    const id = formData.get("id") as string | null;
-    const configs = await fetchConfigurations(admin);
-
-    if (_action === "setLive") {
-      await saveConfigurations(admin, configs.map((c) => ({ ...c, live: c.id === id })));
-    } else if (_action === "stop") {
-      await saveConfigurations(admin, configs.map((c) => ({ ...c, live: false })));
-    } else if (_action === "delete") {
-      await saveConfigurations(admin, configs.filter((c) => c.id !== id));
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error("[FlyToCart] animations action failed:", err?.message);
-    return { success: false };
-  }
+const ANIMATION_NAMES: Record<string, string> = {
+  slide_in: "Slide In", bounce: "Bounce", flip: "Flip", pulse: "Pulse", spiral: "Spiral",
+  zoom: "Zoom", shake: "Shake", float: "Float",
+};
+const SOUND_NAMES: Record<string, string> = {
+  chime: "Chime", whoosh: "Whoosh", pop: "Pop", bell: "Bell", sparkle: "Sparkle",
+  coin: "Coin", laser: "Laser", drum: "Drum",
 };
 
-export default function MyAnimationsPage() {
-  const { configs } = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const submit = useSubmit();
-  const isBusy = navigation.state === "submitting";
-  const liveConfig = configs.find((c) => c.live);
+export default function Index() {
+  const { liveConfig, totalCount, shop } = useLoaderData<typeof loader>();
 
-  const doAction = (data: Record<string, string>) => {
-    const fd = new FormData();
-    Object.entries(data).forEach(([k, v]) => fd.append(k, v));
-    submit(fd, { method: "POST" });
-  };
+  const hasConfigs = totalCount > 0;
+  const isLive = !!liveConfig;
+
+  const API_KEY = "9620563a9ea6bc8e3f91ec87e893f4e8";
+  const EMBED_HANDLE = "add-to-cart";
+  const appEmbedDeepLink = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${API_KEY}/${EMBED_HANDLE}`;
+
+  const [showOnboarding, setShowOnboarding] = React.useState(true);
+
+  const steps = [
+    {
+      num: 1,
+      done: hasConfigs,
+      title: "Create an animation",
+      desc: "Pick an animation style and a sound, then preview the combination.",
+      href: "/app/configure",
+      btnLabel: "Go to Configure",
+    },
+    {
+      num: 2,
+      done: isLive,
+      title: "Set it live",
+      desc: "Open My Animations, find your combination and click Set Live.",
+      href: "/app/animations",
+      btnLabel: "My Animations",
+    },
+    {
+      num: 3,
+      done: false,
+      title: "Enable app embed",
+      desc: "In Shopify theme editor → App Embeds → turn on Fly-to-Cart Pro.",
+      href: appEmbedDeepLink,
+      btnLabel: "Add to Theme",
+      external: true,
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
 
   const cardStyle: React.CSSProperties = {
     background: "#fff",
@@ -89,14 +71,15 @@ export default function MyAnimationsPage() {
     marginBottom: "24px",
   };
 
-  const btnPrimary: React.CSSProperties = {
+  const buttonStyle: React.CSSProperties = {
     padding: "0px 12px",
     backgroundColor: "#000",
     color: "#fff",
     border: "none",
     borderRadius: "6px",
     fontSize: "12px",
-    fontWeight: "500",
+    fontWeight: "400",
+    textDecoration: "none",
     cursor: "pointer",
     transition: "background-color 0.2s",
     display: "inline-flex",
@@ -104,21 +87,23 @@ export default function MyAnimationsPage() {
     justifyContent: "center",
     gap: "6px",
     minHeight: "31px",
-    textDecoration: "none",
   };
 
-  const btnDanger: React.CSSProperties = {
-    ...btnPrimary,
-    backgroundColor: "transparent",
-    color: "#cc0000",
-    border: "1px solid #cc0000",
-  };
-
-  const btnOutlineBlack: React.CSSProperties = {
-    ...btnPrimary,
-    backgroundColor: "transparent",
-    color: "#000",
-    border: "1px solid #000",
+  const closeButtonStyle: React.CSSProperties = {
+    background: "#666",
+    border: "none",
+    fontSize: "10px",
+    lineHeight: "1",
+    cursor: "pointer",
+    color: "white",
+    padding: "0",
+    width: "19px",
+    height: "19px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "background-color 0.2s",
   };
 
   return (
@@ -126,283 +111,249 @@ export default function MyAnimationsPage() {
       <div style={{ padding: "40px 30px", minHeight: "100vh", maxWidth: "914px", margin: "0 auto" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-          <div>
-            <h1 style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: "600", color: "#000" }}>
-              My Animations
-            </h1>
-            <p style={{ margin: 0, fontSize: "13px", color: "#555", fontWeight: "300" }}>
-              {configs.length} configuration{configs.length !== 1 ? "s" : ""} saved
-            </p>
-          </div>
-          <button
-            style={btnPrimary}
-            onClick={() => (window.location.href = "/app/configure")}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#333"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#000"; }}
-          >
-            + Add New
-          </button>
+        <div style={{ marginBottom: "15px" }}>
+          <h1 style={{ margin: "0", fontSize: "24px", fontWeight: "600", color: "#000" }}>
+            Fly to Cart Pro
+          </h1>
         </div>
 
-        {/* Live Status Card */}
-        <div
-          style={{
-            ...cardStyle,
-            backgroundColor: liveConfig ? "#f9f9f9" : "#f9f9f9",
-            borderColor: liveConfig ? "#000" : "#000",
-            marginBottom: "24px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div
-                style={{
-                  width: "44px",
-                  height: "44px",
-                  borderRadius: "50%",
-                  backgroundColor: liveConfig ? "#000" : "#e8e8e8",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "20px",
+        {/* Status Banner */}
+        {showOnboarding && (
+          <div style={{ ...cardStyle, backgroundColor: "#f9f9f9" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+                  <div
+                    style={{
+                      width: "10px",
+                      height: "10px",
+                      borderRadius: "50%",
+                      backgroundColor: isLive ? "#28a745" : "#ccc",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600", color: "#000" }}>
+                    {isLive ? "Live on your store" : "Not yet live"}
+                  </h3>
+                </div>
+                <p style={{ color: "#333", fontSize: "14px", margin: "0 0 12px 0", lineHeight: "1.5" }}>
+                  {isLive ? (
+                    <>
+                      <strong>{ANIMATION_NAMES[liveConfig!.animationKey]}</strong> animation with{" "}
+                      <strong>{SOUND_NAMES[liveConfig!.soundKey]}</strong> sound is active on your store.
+                    </>
+                  ) : hasConfigs ? (
+                    <>You have <strong>{totalCount} saved animation{totalCount > 1 ? "s" : ""}</strong> — none are live yet.</>
+                  ) : (
+                    <>No animation configured yet. Follow the setup guide below to get started.</>
+                  )}
+                </p>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                  <button
+                    style={buttonStyle}
+                    onClick={() =>
+                      (window.location.href = isLive || hasConfigs ? "/app/animations" : "/app/configure")
+                    }
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.backgroundColor = "#000";
+                    }}
+                  >
+                    {isLive ? "Manage" : hasConfigs ? "Set Live" : "Get Started"}
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOnboarding(false)}
+                style={closeButtonStyle}
+                aria-label="Dismiss"
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "#444";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "#666";
                 }}
               >
-                {liveConfig ? ANIMATION_ICON[liveConfig.animationKey] : "⚪"}
-              </div>
-              {liveConfig && (
-                <>
-                  <style>{`
-                    @keyframes liveping {
-                      0% { transform: scale(1); opacity: 0.6; }
-                      100% { transform: scale(1.7); opacity: 0; }
-                    }
-                    .live-ping {
-                      animation: liveping 1.4s ease-out infinite;
-                    }
-                  `}</style>
-                  <div
-                    className="live-ping"
-                    style={{
-                      position: "absolute",
-                      bottom: "1px",
-                      right: "1px",
-                      width: "10px",
-                      height: "10px",
-                      borderRadius: "50%",
-                      backgroundColor: "#28a745",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: "1px",
-                      right: "1px",
-                      width: "10px",
-                      height: "10px",
-                      borderRadius: "50%",
-                      backgroundColor: "#28a745",
-                    }}
-                  />
-                </>
-              )}
-            </div>
-
-            <div style={{ flex: 1, minWidth: "160px" }}>
-              {liveConfig ? (
-                <>
-                  <div style={{ fontSize: "15px", fontWeight: "600", color: "#000", marginBottom: "3px" }}>
-                    {ANIMATION_NAMES[liveConfig.animationKey]} + {SOUND_NAMES[liveConfig.soundKey]}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#28a745", fontWeight: "500", display: "flex", alignItems: "center", gap: "5px" }}>
-                    <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#28a745" }} />
-                    Live on your store
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: "15px", fontWeight: "600", color: "#000", marginBottom: "3px" }}>
-                    No animation live
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#888", fontWeight: "400" }}>
-                    Set one live below to activate on your store
-                  </div>
-                </>
-              )}
-            </div>
-
-            {liveConfig && (
-              <button
-                disabled={isBusy}
-                style={btnDanger}
-                onClick={() => doAction({ _action: "stop" })}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#fff0f0"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
-              >
-                Stop
+                ✕
               </button>
-            )}
+            </div>
+          </div>
+        )}
+
+        {/* Setup Guide */}
+        <div style={cardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", paddingBottom: "16px", borderBottom: "1px solid #000" }}>
+            <div>
+              <h3 style={{ margin: "0 0 8px 0", fontWeight: "500", fontSize: "18px", lineHeight: "100%", color: "#000" }}>
+                Setup Guide
+              </h3>
+              <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#555", margin: "0" }}>
+                {doneCount} of {steps.length} steps complete
+              </p>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ height: "4px", background: "#eee", borderRadius: "2px", overflow: "hidden", marginBottom: "20px" }}>
+            <div
+              style={{
+                height: "100%",
+                background: "#000",
+                borderRadius: "2px",
+                width: `${(doneCount / steps.length) * 100}%`,
+                transition: "width 0.3s",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {steps.map((step) => (
+              <div
+                key={step.num}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "14px",
+                  padding: "16px",
+                  borderRadius: "8px",
+                  background: step.done ? "#f9f9f9" : "#fff",
+                  border: "1px solid #e8e8e8",
+                }}
+              >
+                <div
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "50%",
+                    border: step.done ? "2px solid #000" : "2px solid #ddd",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    color: step.done ? "#fff" : "#aaa",
+                    background: step.done ? "#000" : "transparent",
+                    flexShrink: 0,
+                    marginTop: "1px",
+                  }}
+                >
+                  {step.done ? "✓" : step.num}
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: step.done ? "#888" : "#000",
+                      marginBottom: "4px",
+                      textDecoration: step.done ? "line-through" : "none",
+                    }}
+                  >
+                    {step.title}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#888", lineHeight: "1.5" }}>
+                    {step.desc}
+                  </div>
+                  {!step.done && step.href && (
+                    (step as any).external ? (
+                      <a
+                        href={step.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ ...buttonStyle, marginTop: "10px" }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "#000";
+                        }}
+                      >
+                        {step.btnLabel} →
+                      </a>
+                    ) : (
+                      <button
+                        style={{ ...buttonStyle, marginTop: "10px" }}
+                        onClick={() => (window.location.href = step.href!)}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = "#000";
+                        }}
+                      >
+                        {step.btnLabel} →
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Animations List */}
-        {configs.length === 0 ? (
-          <div style={{ ...cardStyle, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "280px", textAlign: "center" }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>🎬</div>
-            <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: "600", color: "#000" }}>
-              No animations yet
-            </h3>
-            <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#888", maxWidth: "280px", lineHeight: "1.5" }}>
-              Create your first animation and sound combination to get started.
-            </p>
+        {/* My Animations */}
+        <div style={{ ...cardStyle, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "48px", paddingBottom: "24px", borderBottom: "1px solid #000" }}>
+            <div>
+              <h3 style={{ margin: "0 0 8px 0", fontWeight: "500", fontSize: "18px", lineHeight: "100%", color: "#000" }}>
+                My Animations
+              </h3>
+              <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#555", margin: "0" }}>
+                Create & manage animation configurations for your store.
+              </p>
+            </div>
             <button
-              style={btnPrimary}
+              style={buttonStyle}
               onClick={() => (window.location.href = "/app/configure")}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#333"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#000"; }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.backgroundColor = "#000";
+              }}
             >
               + Create Animation
             </button>
           </div>
-        ) : (
-          <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", paddingBottom: "16px", borderBottom: "1px solid #000" }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "500", color: "#000" }}>
-                Saved Configurations
-              </h3>
-              <span style={{ fontSize: "12px", color: "#888" }}>
-                {configs.filter((c) => c.live).length > 0 ? "1 live" : "0 live"} · {configs.length} total
-              </span>
-            </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {configs.map((cfg) => (
-                <div
-                  key={cfg.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "16px",
-                    padding: "16px",
-                    borderRadius: "8px",
-                    border: cfg.live ? "1.5px solid #000" : "1px solid #e8e8e8",
-                    background: cfg.live ? "#f9f9f9" : "#fff",
-                    transition: "border-color 0.2s, background 0.2s",
-                    flexWrap: "wrap",
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "200px", gap: "24px" }}>
+            {hasConfigs ? (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#000", margin: "0 0 8px 0" }}>
+                  You have <strong style={{ fontWeight: "700" }}>{totalCount} animation{totalCount > 1 ? "s" : ""}</strong> saved.
+                </p>
+                <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#000", margin: "0 0 16px 0" }}>
+                  {isLive
+                    ? <>Currently running: <strong style={{ fontWeight: "700" }}>{ANIMATION_NAMES[liveConfig!.animationKey]} + {SOUND_NAMES[liveConfig!.soundKey]}</strong></>
+                    : "None are live yet — go to My Animations to set one live."}
+                </p>
+                <button
+                  style={buttonStyle}
+                  onClick={() => (window.location.href = "/app/animations")}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = "#000";
                   }}
                 >
-                  {/* Animation icon */}
-                  <div
-                    style={{
-                      width: "42px",
-                      height: "42px",
-                      borderRadius: "8px",
-                      backgroundColor: cfg.live ? "#000" : "#f0f0f0",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "20px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {ANIMATION_ICON[cfg.animationKey]}
-                  </div>
-
-                  {/* Labels */}
-                  <div style={{ flex: 1, minWidth: "140px" }}>
-                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#000", marginBottom: "4px" }}>
-                      {ANIMATION_NAMES[cfg.animationKey] ?? cfg.animationKey}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#666", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span>{ANIMATION_DESC[cfg.animationKey]}</span>
-                    </div>
-                  </div>
-
-                  {/* Sound badge */}
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      padding: "5px 10px",
-                      borderRadius: "20px",
-                      background: "#f0f0f0",
-                      fontSize: "12px",
-                      fontWeight: "500",
-                      color: "#333",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {SOUND_ICON[cfg.soundKey]}
-                    <span>{SOUND_NAMES[cfg.soundKey] ?? cfg.soundKey}</span>
-                  </div>
-
-                  {/* Status badge */}
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      padding: "5px 12px",
-                      borderRadius: "20px",
-                      background: cfg.live ? "#000" : "#f4f4f4",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      color: cfg.live ? "#fff" : "#888",
-                      flexShrink: 0,
-                      minWidth: "70px",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {cfg.live ? (
-                      <>
-                        <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#28a745" }} />
-                        Live
-                      </>
-                    ) : (
-                      "Stopped"
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                    {!cfg.live && (
-                      <button
-                        disabled={isBusy}
-                        style={btnPrimary}
-                        onClick={() => doAction({ _action: "setLive", id: cfg.id })}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#333"; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#000"; }}
-                      >
-                        Set Live
-                      </button>
-                    )}
-                    {cfg.live && (
-                      <button
-                        disabled={isBusy}
-                        style={btnOutlineBlack}
-                        onClick={() => doAction({ _action: "stop" })}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f0f0"; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
-                      >
-                        Stop
-                      </button>
-                    )}
-                    <button
-                      disabled={isBusy}
-                      style={btnDanger}
-                      onClick={() => doAction({ _action: "delete", id: cfg.id })}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#fff0f0"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  View All Animations
+                </button>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#000", margin: "0 0 8px 0" }}>
+                  You don&apos;t have any animations yet.
+                </p>
+                <p style={{ fontWeight: "300", fontSize: "14px", lineHeight: "100%", color: "#000", margin: "0" }}>
+                  Click the <strong style={{ fontWeight: "700" }}>Create Animation</strong> button above to create your first one.
+                </p>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
       </div>
     </div>
@@ -413,4 +364,6 @@ export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
 
-export const headers = (headersArgs: any) => boundary.headers(headersArgs);
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
