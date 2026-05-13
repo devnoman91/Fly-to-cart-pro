@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -12,6 +12,9 @@ const ANIMATIONS = [
   { key: "flip",     name: "Flip",      desc: "Product rotates 360° while flying",      emoji: "🔄"  },
   { key: "pulse",    name: "Pulse",     desc: "Cart icon pulses when item is added",    emoji: "💫"  },
   { key: "spiral",   name: "Spiral",    desc: "Product spirals upward to cart",         emoji: "🌀"  },
+  { key: "zoom",     name: "Zoom",      desc: "Product zooms in then flies to cart",    emoji: "🔎"  },
+  { key: "shake",    name: "Shake",     desc: "Product shakes then shoots to cart",     emoji: "📳"  },
+  { key: "float",    name: "Float",     desc: "Product floats gently with a glow trail", emoji: "🎈" },
 ];
 
 const SOUNDS = [
@@ -20,6 +23,9 @@ const SOUNDS = [
   { key: "pop",     name: "Pop",     desc: "Playful bubble pop",            emoji: "🫧" },
   { key: "bell",    name: "Bell",    desc: "Classic ringing bell",          emoji: "🛎️" },
   { key: "sparkle", name: "Sparkle", desc: "Magical tinkling effect",       emoji: "✨" },
+  { key: "coin",    name: "Coin",    desc: "Coin jingle cash register",     emoji: "🪙" },
+  { key: "laser",   name: "Laser",   desc: "Sci-fi laser zap effect",       emoji: "⚡" },
+  { key: "drum",    name: "Drum",    desc: "Deep bass drum hit",            emoji: "🥁" },
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -66,6 +72,8 @@ export default function ConfigurePage() {
   const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
   const [selectedSound,     setSelectedSound]      = useState<string | null>(null);
   const [isPlaying,         setIsPlaying]          = useState(false);
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  const cartRef       = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!actionData) return;
@@ -88,16 +96,118 @@ export default function ConfigurePage() {
         pop:     () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(150,now); o.frequency.exponentialRampToValueAtTime(50,now+0.1); g.gain.setValueAtTime(0.4,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.1); o.start(now); o.stop(now+0.1); },
         bell:    () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=800; g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.01,now+0.7); o.start(now); o.stop(now+0.7); },
         sparkle: () => [0,1,2].forEach(i => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value=1000+i*300; g.gain.setValueAtTime(0.2,now+i*0.15); g.gain.exponentialRampToValueAtTime(0.01,now+i*0.15+0.15); o.start(now+i*0.15); o.stop(now+i*0.15+0.15); }),
+        coin:    () => [1200,1500,1800,1400].forEach((f,i) => { const o=ctx.createOscillator(),g=ctx.createGain(); o.type='triangle' as OscillatorType; o.connect(g); g.connect(ctx.destination); o.frequency.value=f; g.gain.setValueAtTime(0.2,now+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.05+0.12); o.start(now+i*0.05); o.stop(now+i*0.05+0.12); }),
+        laser:   () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.type='sawtooth' as OscillatorType; o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(1200,now); o.frequency.exponentialRampToValueAtTime(80,now+0.25); g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.25); o.start(now); o.stop(now+0.25); },
+        drum:    () => { const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.setValueAtTime(160,now); o.frequency.exponentialRampToValueAtTime(30,now+0.15); g.gain.setValueAtTime(0.5,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.2); o.start(now); o.stop(now+0.2); },
       };
       map[soundKey]?.();
     } catch {}
+  };
+
+  const runPreviewAnimation = (animKey: string) => {
+    const box    = previewBoxRef.current;
+    const cartEl = cartRef.current;
+    if (!box || !cartEl) return;
+
+    // Pulse: no bubble, just animate the cart icon directly
+    if (animKey === 'pulse') {
+      cartEl.animate([
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.45)' },
+        { transform: 'scale(1.1)' },
+        { transform: 'scale(1.35)' },
+        { transform: 'scale(1)' },
+      ], { duration: 700, easing: 'ease-in-out' });
+      return;
+    }
+
+    // Create a small product bubble that flies from left to the cart in the center
+    // Box is 160×160. Bubble starts at left:16px, vertically centered → center ≈ (29px, 80px)
+    // Cart is at center → (80px, 80px). So translateX target ≈ 51px, translateY ≈ 0
+    const bubble = document.createElement('div');
+    bubble.style.cssText = 'position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:24px;pointer-events:none;z-index:5;';
+    bubble.textContent = '🛍️';
+    box.appendChild(bubble);
+
+    const frameMap: Record<string, Keyframe[]> = {
+      slide_in: [
+        { transform: 'translateY(-50%) translateX(0) scale(1)',        opacity: 1, offset: 0 },
+        { transform: 'translateY(-50%) translateX(51px) scale(0.15)',  opacity: 0, offset: 1 },
+      ],
+      bounce: [
+        { transform: 'translateY(-50%) scale(1,1)',                          opacity: 1, offset: 0    },
+        { transform: 'translateY(calc(-50% + 5px)) scale(1.2,0.75)',         opacity: 1, offset: 0.07 },
+        { transform: 'translateY(calc(-50% - 22px)) scale(0.85,1.2)',        opacity: 1, offset: 0.2  },
+        { transform: 'translateY(calc(-50% - 22px)) scale(1,1)',             opacity: 1, offset: 0.27 },
+        { transform: 'translateY(calc(-50% + 3px)) scale(1.15,0.88)',        opacity: 1, offset: 0.38 },
+        { transform: 'translateY(calc(-50% - 10px)) scale(0.92,1.1)',        opacity: 1, offset: 0.47 },
+        { transform: 'translateY(-50%) scale(1,1)',                          opacity: 1, offset: 0.54 },
+        { transform: 'translateY(-50%) translateX(30px) scale(0.6)',         opacity: 1, offset: 0.78 },
+        { transform: 'translateY(-50%) translateX(51px) scale(0.1)',         opacity: 0, offset: 1    },
+      ],
+      flip: [
+        { transform: 'translateY(-50%) translateX(0) rotateY(0deg) scale(1)',       opacity: 1,   offset: 0    },
+        { transform: 'translateY(-50%) translateX(17px) rotateY(180deg) scale(0.8)',opacity: 1,   offset: 0.33 },
+        { transform: 'translateY(-50%) translateX(34px) rotateY(360deg) scale(0.5)',opacity: 0.7, offset: 0.66 },
+        { transform: 'translateY(-50%) translateX(51px) rotateY(540deg) scale(0.1)',opacity: 0,   offset: 1    },
+      ],
+      spiral: [
+        { transform: 'translateY(-50%) translate(0,0) rotate(0deg) scale(1)',            opacity: 1, offset: 0    },
+        { transform: 'translateY(-50%) translate(10px,-22px) rotate(120deg) scale(0.8)', opacity: 1, offset: 0.28 },
+        { transform: 'translateY(-50%) translate(30px,12px) rotate(240deg) scale(0.55)', opacity: 1, offset: 0.56 },
+        { transform: 'translateY(-50%) translate(51px,0) rotate(360deg) scale(0.1)',     opacity: 0, offset: 1    },
+      ],
+      zoom: [
+        { transform: 'translateY(-50%) scale(0.1)',                   opacity: 0, offset: 0    },
+        { transform: 'translateY(-50%) scale(1.4)',                   opacity: 1, offset: 0.18 },
+        { transform: 'translateY(-50%) scale(1.0)',                   opacity: 1, offset: 0.28 },
+        { transform: 'translateY(-50%) translateX(30px) scale(0.6)', opacity: 1, offset: 0.68 },
+        { transform: 'translateY(-50%) translateX(51px) scale(0.1)', opacity: 0, offset: 1    },
+      ],
+      shake: [
+        { transform: 'translateY(-50%) translateX(0)',                       opacity: 1, offset: 0    },
+        { transform: 'translateY(-50%) translateX(-9px)',                    opacity: 1, offset: 0.08 },
+        { transform: 'translateY(-50%) translateX(9px)',                     opacity: 1, offset: 0.16 },
+        { transform: 'translateY(-50%) translateX(-7px)',                    opacity: 1, offset: 0.24 },
+        { transform: 'translateY(-50%) translateX(7px)',                     opacity: 1, offset: 0.32 },
+        { transform: 'translateY(-50%) translateX(-4px)',                    opacity: 1, offset: 0.38 },
+        { transform: 'translateY(-50%) translateX(0)',                       opacity: 1, offset: 0.44 },
+        { transform: 'translateY(-50%) translateX(30px) scale(0.65)',        opacity: 1, offset: 0.72 },
+        { transform: 'translateY(-50%) translateX(51px) scale(0.1)',         opacity: 0, offset: 1    },
+      ],
+      float: [
+        { transform: 'translateY(-50%) translate(0,0) scale(1)',           opacity: 1, offset: 0    },
+        { transform: 'translateY(-50%) translate(8px,-18px) scale(1.05)', opacity: 1, offset: 0.2  },
+        { transform: 'translateY(-50%) translate(18px,-22px) scale(1.0)', opacity: 1, offset: 0.38 },
+        { transform: 'translateY(-50%) translate(33px,-10px) scale(0.75)',opacity: 1, offset: 0.62 },
+        { transform: 'translateY(-50%) translate(51px,0) scale(0.1)',     opacity: 0, offset: 1    },
+      ],
+    };
+
+    const frames = frameMap[animKey];
+    if (!frames) { bubble.remove(); return; }
+
+    const durations: Record<string, number> = { bounce: 1100, float: 1300, spiral: 1100, shake: 950 };
+    const duration = durations[animKey] ?? 800;
+
+    const anim = bubble.animate(frames, { duration, easing: 'ease-in-out', fill: 'forwards' });
+
+    setTimeout(() => {
+      cartEl.animate([
+        { transform: 'scale(1)' }, { transform: 'scale(1.4)' },
+        { transform: 'scale(0.9)' }, { transform: 'scale(1)' },
+      ], { duration: 350, easing: 'ease-out' });
+    }, duration * 0.88);
+
+    anim.onfinish = () => bubble.remove();
   };
 
   const handlePreview = () => {
     if (!selectedAnimation || !selectedSound) return;
     setIsPlaying(true);
     playSound(selectedSound);
-    setTimeout(() => setIsPlaying(false), 1000);
+    runPreviewAnimation(selectedAnimation);
+    setTimeout(() => setIsPlaying(false), 1400);
   };
 
   return (
@@ -180,6 +290,7 @@ export default function ConfigurePage() {
             <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
               {/* Preview box */}
               <div
+                ref={previewBoxRef}
                 style={{
                   flex: "0 0 auto",
                   width: "160px",
@@ -192,10 +303,12 @@ export default function ConfigurePage() {
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
+                  position: "relative",
+                  overflow: "hidden",
                 }}
                 onClick={handlePreview}
               >
-                <div style={{ fontSize: "48px", animation: isPlaying ? "ftcBounce 0.5s infinite" : "none" }}>🛒</div>
+                <div ref={cartRef} style={{ fontSize: "48px" }}>🛒</div>
                 <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>{isPlaying ? "Playing..." : "▶ Click to preview"}</div>
               </div>
 
@@ -238,12 +351,7 @@ export default function ConfigurePage() {
             </div>
           </s-box>
 
-          <style>{`
-            @keyframes ftcBounce {
-              0%, 100% { transform: scale(1); }
-              50%       { transform: scale(1.15); }
-            }
-          `}</style>
+
         </s-section>
       )}
     </s-page>
