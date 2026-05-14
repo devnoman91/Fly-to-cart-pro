@@ -7,10 +7,6 @@ primary_region = "sin"
   PORT = "3000"
   NODE_ENV = "production"
 
-[mounts]
-  source = "fly_to_cart_data"
-  destination = "/app/data"
-
 [http_service]
   internal_port = 3000
   force_https = true
