@@ -2,7 +2,7 @@
 
 client_id = "9620563a9ea6bc8e3f91ec87e893f4e8"
 name = "Fly To Cart Pro"
-application_url = "https://example.com"
+application_url = "https://fly-to-cart-pro.fly.dev"
 embedded = true
 
 [webhooks]
@@ -21,7 +21,7 @@ api_version = "2026-07"
 scopes = "write_products,read_products,write_metaobjects,read_metaobjects"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://fly-to-cart-pro.fly.dev/auth/callback" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
