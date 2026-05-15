@@ -5,6 +5,15 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchConfigurations, saveConfigurations, type FtcConfig } from "../utils/shopify-graphql";
+import {
+  card,
+  cardPadding,
+  mutedText,
+  pageShell,
+  primaryButton,
+  secondaryButton,
+  sectionTitle,
+} from "../styles/ui";
 
 const ANIMATIONS = [
   { key: "slide_in", name: "Slide In",  desc: "Product slides smoothly to cart",       emoji: "➡️"  },
@@ -27,6 +36,25 @@ const SOUNDS = [
   { key: "laser",   name: "Laser",   desc: "Sci-fi laser zap effect",       emoji: "⚡" },
   { key: "drum",    name: "Drum",    desc: "Deep bass drum hit",            emoji: "🥁" },
 ];
+
+const optionCardStyle = (active: boolean): React.CSSProperties => ({
+  ...card,
+  background: active ? "#f8fafc" : "#fff",
+  border: active ? "2px solid #111827" : "1px solid #d7d7d7",
+  cursor: "pointer",
+  display: "block",
+  minHeight: "142px",
+  padding: "16px",
+  width: "100%",
+  textAlign: "left",
+  transition: "border-color 0.15s, box-shadow 0.15s, transform 0.15s",
+  userSelect: "none",
+});
+
+const stepCardStyle: React.CSSProperties = {
+  ...cardPadding,
+  marginBottom: "16px",
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -85,7 +113,7 @@ export default function ConfigurePage() {
     }
   }, [actionData]);
 
-  const canAdd = selectedAnimation && selectedSound;
+  const canAdd = Boolean(selectedAnimation && selectedSound);
 
   const playSound = (soundKey: string) => {
     try {
@@ -122,66 +150,87 @@ export default function ConfigurePage() {
       return;
     }
 
-    // Create a small product bubble that flies from left to the cart in the center
-    // Box is 160×160. Bubble starts at left:16px, vertically centered → center ≈ (29px, 80px)
-    // Cart is at center → (80px, 80px). So translateX target ≈ 51px, translateY ≈ 0
+    const boxWidth = box.clientWidth || 240;
+    const boxHeight = box.clientHeight || 220;
+    const bubbleLeft = 24;
+    const bubbleSize = 54;
+    const targetX = (boxWidth / 2) - bubbleLeft - (bubbleSize / 2);
+
+    // Create a small product tile that flies from left to the cart in the center.
     const bubble = document.createElement('div');
-    bubble.style.cssText = 'position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:24px;pointer-events:none;z-index:5;';
-    bubble.textContent = '🛍️';
+    bubble.style.cssText = [
+      'position:absolute',
+      `left:${bubbleLeft}px`,
+      'top:50%',
+      `width:${bubbleSize}px`,
+      `height:${bubbleSize}px`,
+      'transform:translateY(-50%)',
+      'border-radius:12px',
+      'background:linear-gradient(135deg,#f8fafc 0%,#ffffff 48%,#e9f5ff 100%)',
+      'border:2px solid #ffffff',
+      'box-shadow:0 10px 22px rgba(17,24,39,0.20)',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'pointer-events:none',
+      'z-index:5',
+      'will-change:transform,opacity',
+      'backface-visibility:hidden',
+    ].join(';');
+    bubble.innerHTML = [
+      '<div style="width:34px;height:34px;border-radius:9px;background:#111827;position:relative;box-shadow:inset 0 -8px 0 rgba(255,255,255,0.14);">',
+      '<div style="position:absolute;left:8px;right:8px;top:-6px;height:12px;border:2px solid #111827;border-bottom:0;border-radius:12px 12px 0 0;"></div>',
+      '<div style="position:absolute;left:10px;top:12px;width:14px;height:3px;border-radius:999px;background:#ffffff;"></div>',
+      '</div>',
+    ].join('');
     box.appendChild(bubble);
 
     const frameMap: Record<string, Keyframe[]> = {
       slide_in: [
-        { transform: 'translateY(-50%) translateX(0) scale(1)',        opacity: 1, offset: 0 },
-        { transform: 'translateY(-50%) translateX(51px) scale(0.15)',  opacity: 0, offset: 1 },
+        { transform: 'translate3d(0,-50%,0) scale(1)', opacity: 1, offset: 0 },
+        { transform: `translate3d(${targetX * 0.55}px,calc(-50% - ${boxHeight * 0.18}px),0) scale(0.85)`, opacity: 1, offset: 0.52 },
+        { transform: `translate3d(${targetX}px,-50%,0) scale(0.28)`, opacity: 0, offset: 1 },
       ],
       bounce: [
-        { transform: 'translateY(-50%) scale(1,1)',                          opacity: 1, offset: 0    },
-        { transform: 'translateY(calc(-50% + 5px)) scale(1.2,0.75)',         opacity: 1, offset: 0.07 },
-        { transform: 'translateY(calc(-50% - 22px)) scale(0.85,1.2)',        opacity: 1, offset: 0.2  },
-        { transform: 'translateY(calc(-50% - 22px)) scale(1,1)',             opacity: 1, offset: 0.27 },
-        { transform: 'translateY(calc(-50% + 3px)) scale(1.15,0.88)',        opacity: 1, offset: 0.38 },
-        { transform: 'translateY(calc(-50% - 10px)) scale(0.92,1.1)',        opacity: 1, offset: 0.47 },
-        { transform: 'translateY(-50%) scale(1,1)',                          opacity: 1, offset: 0.54 },
-        { transform: 'translateY(-50%) translateX(30px) scale(0.6)',         opacity: 1, offset: 0.78 },
-        { transform: 'translateY(-50%) translateX(51px) scale(0.1)',         opacity: 0, offset: 1    },
+        { transform: 'translate3d(0,-50%,0) scale(1)', opacity: 1, offset: 0 },
+        { transform: 'translate3d(0,calc(-50% + 8px),0) scale(1.14,0.88)', opacity: 1, offset: 0.1 },
+        { transform: `translate3d(${targetX * 0.22}px,calc(-50% - ${boxHeight * 0.28}px),0) scale(0.96,1.05)`, opacity: 1, offset: 0.32 },
+        { transform: `translate3d(${targetX * 0.48}px,calc(-50% + 4px),0) scale(1.05,0.94)`, opacity: 1, offset: 0.55 },
+        { transform: `translate3d(${targetX * 0.74}px,calc(-50% - ${boxHeight * 0.12}px),0) scale(0.78)`, opacity: 0.9, offset: 0.78 },
+        { transform: `translate3d(${targetX}px,-50%,0) scale(0.2)`, opacity: 0, offset: 1 },
       ],
       flip: [
-        { transform: 'translateY(-50%) translateX(0) rotateY(0deg) scale(1)',       opacity: 1,   offset: 0    },
-        { transform: 'translateY(-50%) translateX(17px) rotateY(180deg) scale(0.8)',opacity: 1,   offset: 0.33 },
-        { transform: 'translateY(-50%) translateX(34px) rotateY(360deg) scale(0.5)',opacity: 0.7, offset: 0.66 },
-        { transform: 'translateY(-50%) translateX(51px) rotateY(540deg) scale(0.1)',opacity: 0,   offset: 1    },
+        { transform: 'translate3d(0,-50%,0) rotateY(0deg) scale(1)', opacity: 1, offset: 0 },
+        { transform: `translate3d(${targetX * 0.35}px,calc(-50% - ${boxHeight * 0.18}px),0) rotateY(180deg) scale(0.88)`, opacity: 1, offset: 0.36 },
+        { transform: `translate3d(${targetX * 0.7}px,calc(-50% - ${boxHeight * 0.08}px),0) rotateY(360deg) scale(0.6)`, opacity: 0.75, offset: 0.72 },
+        { transform: `translate3d(${targetX}px,-50%,0) rotateY(540deg) scale(0.18)`, opacity: 0, offset: 1 },
       ],
       spiral: [
-        { transform: 'translateY(-50%) translate(0,0) rotate(0deg) scale(1)',            opacity: 1, offset: 0    },
-        { transform: 'translateY(-50%) translate(10px,-22px) rotate(120deg) scale(0.8)', opacity: 1, offset: 0.28 },
-        { transform: 'translateY(-50%) translate(30px,12px) rotate(240deg) scale(0.55)', opacity: 1, offset: 0.56 },
-        { transform: 'translateY(-50%) translate(51px,0) rotate(360deg) scale(0.1)',     opacity: 0, offset: 1    },
+        { transform: 'translate3d(0,-50%,0) rotate(0deg) scale(1)', opacity: 1, offset: 0 },
+        { transform: `translate3d(${targetX * 0.22}px,calc(-50% - ${boxHeight * 0.28}px),0) rotate(130deg) scale(0.88)`, opacity: 1, offset: 0.28 },
+        { transform: `translate3d(${targetX * 0.6}px,calc(-50% + ${boxHeight * 0.1}px),0) rotate(260deg) scale(0.58)`, opacity: 0.9, offset: 0.62 },
+        { transform: `translate3d(${targetX}px,-50%,0) rotate(390deg) scale(0.16)`, opacity: 0, offset: 1 },
       ],
       zoom: [
-        { transform: 'translateY(-50%) scale(0.1)',                   opacity: 0, offset: 0    },
-        { transform: 'translateY(-50%) scale(1.4)',                   opacity: 1, offset: 0.18 },
-        { transform: 'translateY(-50%) scale(1.0)',                   opacity: 1, offset: 0.28 },
-        { transform: 'translateY(-50%) translateX(30px) scale(0.6)', opacity: 1, offset: 0.68 },
-        { transform: 'translateY(-50%) translateX(51px) scale(0.1)', opacity: 0, offset: 1    },
+        { transform: 'translate3d(0,-50%,0) scale(0.4)', opacity: 0, offset: 0 },
+        { transform: 'translate3d(0,-50%,0) scale(1.18)', opacity: 1, offset: 0.2 },
+        { transform: `translate3d(${targetX * 0.56}px,calc(-50% - ${boxHeight * 0.16}px),0) scale(0.72)`, opacity: 1, offset: 0.66 },
+        { transform: `translate3d(${targetX}px,-50%,0) scale(0.2)`, opacity: 0, offset: 1 },
       ],
       shake: [
-        { transform: 'translateY(-50%) translateX(0)',                       opacity: 1, offset: 0    },
-        { transform: 'translateY(-50%) translateX(-9px)',                    opacity: 1, offset: 0.08 },
-        { transform: 'translateY(-50%) translateX(9px)',                     opacity: 1, offset: 0.16 },
-        { transform: 'translateY(-50%) translateX(-7px)',                    opacity: 1, offset: 0.24 },
-        { transform: 'translateY(-50%) translateX(7px)',                     opacity: 1, offset: 0.32 },
-        { transform: 'translateY(-50%) translateX(-4px)',                    opacity: 1, offset: 0.38 },
-        { transform: 'translateY(-50%) translateX(0)',                       opacity: 1, offset: 0.44 },
-        { transform: 'translateY(-50%) translateX(30px) scale(0.65)',        opacity: 1, offset: 0.72 },
-        { transform: 'translateY(-50%) translateX(51px) scale(0.1)',         opacity: 0, offset: 1    },
+        { transform: 'translate3d(0,-50%,0)', opacity: 1, offset: 0 },
+        { transform: 'translate3d(-9px,-50%,0)', opacity: 1, offset: 0.08 },
+        { transform: 'translate3d(9px,-50%,0)', opacity: 1, offset: 0.16 },
+        { transform: 'translate3d(-6px,-50%,0)', opacity: 1, offset: 0.24 },
+        { transform: 'translate3d(0,-50%,0)', opacity: 1, offset: 0.36 },
+        { transform: `translate3d(${targetX * 0.62}px,calc(-50% - ${boxHeight * 0.16}px),0) scale(0.7)`, opacity: 1, offset: 0.72 },
+        { transform: `translate3d(${targetX}px,-50%,0) scale(0.2)`, opacity: 0, offset: 1 },
       ],
       float: [
-        { transform: 'translateY(-50%) translate(0,0) scale(1)',           opacity: 1, offset: 0    },
-        { transform: 'translateY(-50%) translate(8px,-18px) scale(1.05)', opacity: 1, offset: 0.2  },
-        { transform: 'translateY(-50%) translate(18px,-22px) scale(1.0)', opacity: 1, offset: 0.38 },
-        { transform: 'translateY(-50%) translate(33px,-10px) scale(0.75)',opacity: 1, offset: 0.62 },
-        { transform: 'translateY(-50%) translate(51px,0) scale(0.1)',     opacity: 0, offset: 1    },
+        { transform: 'translate3d(0,-50%,0) scale(1)', opacity: 1, offset: 0 },
+        { transform: `translate3d(${targetX * 0.18}px,calc(-50% - ${boxHeight * 0.2}px),0) scale(1.02)`, opacity: 1, offset: 0.28 },
+        { transform: `translate3d(${targetX * 0.58}px,calc(-50% - ${boxHeight * 0.24}px),0) scale(0.72)`, opacity: 0.9, offset: 0.68 },
+        { transform: `translate3d(${targetX}px,-50%,0) scale(0.18)`, opacity: 0, offset: 1 },
       ],
     };
 
@@ -211,150 +260,274 @@ export default function ConfigurePage() {
     setTimeout(() => setIsPlaying(false), 1400);
   };
 
+  const selectedAnimationOption = ANIMATIONS.find((animation) => animation.key === selectedAnimation);
+  const selectedSoundOption = SOUNDS.find((sound) => sound.key === selectedSound);
+
   return (
     <s-page heading="Configure Animation">
       <s-button slot="primary-action" onClick={() => navigate("/app/animations")} variant="secondary">
         My Animations
       </s-button>
-      <s-button slot="secondary-action" onClick={() => navigate("/app")}>
-        Back
-      </s-button>
+      <s-link slot="breadcrumbs" onClick={() => navigate("/app")}>Home</s-link>
 
-      {/* Step 1: Animation */}
-      <s-section heading="Step 1 — Choose Animation">
-        <s-box padding="base">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+      <div style={pageShell}>
+      <div style={{ ...cardPadding, marginBottom: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: "0 0 6px", color: "#111827", fontSize: "22px", lineHeight: "1.2" }}>
+              Build an add-to-cart effect
+            </h2>
+            <p style={{ ...mutedText, margin: 0, maxWidth: "640px" }}>
+              Choose one animation and one sound, preview the result, then save it to My Animations.
+            </p>
+          </div>
+          <div
+            style={{
+              alignItems: "center",
+              background: "#f3f4f6",
+              border: "1px solid #e5e7eb",
+              borderRadius: "999px",
+              color: "#374151",
+              display: "inline-flex",
+              fontSize: "12px",
+              fontWeight: 800,
+              height: "30px",
+              padding: "0 12px",
+            }}
+          >
+            {(selectedAnimation ? 1 : 0) + (selectedSound ? 1 : 0)}/2 selected
+          </div>
+        </div>
+      </div>
+
+      <section style={stepCardStyle}>
+        <div style={{ marginBottom: "16px" }}>
+          <h2 style={sectionTitle}>Step 1: Choose animation</h2>
+          <p style={{ ...mutedText, margin: 0 }}>Pick the motion customers will see after clicking Add to cart.</p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "12px" }}>
             {ANIMATIONS.map((anim) => {
               const active = selectedAnimation === anim.key;
               return (
-                <div
+                <button
+                  type="button"
                   key={anim.key}
                   onClick={() => setSelectedAnimation(anim.key)}
-                  style={{
-                    padding: "16px",
-                    border: active ? "2px solid #0066cc" : "2px solid #e0e0e0",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    background: active ? "#f0f6ff" : "#fff",
-                    textAlign: "center",
-                    transition: "all 0.15s",
-                    userSelect: "none",
-                  }}
+                  style={optionCardStyle(active)}
                 >
-                  <div style={{ fontSize: "32px", marginBottom: "8px" }}>{anim.emoji}</div>
-                  <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{anim.name}</div>
-                  <div style={{ fontSize: "12px", color: "#666" }}>{anim.desc}</div>
-                  {active && <div style={{ marginTop: "8px", fontSize: "11px", color: "#0066cc", fontWeight: 600 }}>✓ Selected</div>}
-                </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                    <div style={{ fontSize: "28px", lineHeight: 1 }}>{anim.emoji}</div>
+                    {active && (
+                      <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{anim.name}</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>{anim.desc}</div>
+                </button>
               );
             })}
-          </div>
-        </s-box>
-      </s-section>
+        </div>
+      </section>
 
-      {/* Step 2: Sound */}
-      <s-section heading="Step 2 — Choose Sound">
-        <s-box padding="base">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "12px" }}>
+      <section style={stepCardStyle}>
+        <div style={{ marginBottom: "16px" }}>
+          <h2 style={sectionTitle}>Step 2: Choose sound</h2>
+          <p style={{ ...mutedText, margin: 0 }}>Select the audio cue that plays with the animation.</p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "12px" }}>
             {SOUNDS.map((snd) => {
               const active = selectedSound === snd.key;
               return (
-                <div
+                <button
+                  type="button"
                   key={snd.key}
                   onClick={() => { setSelectedSound(snd.key); playSound(snd.key); }}
-                  style={{
-                    padding: "16px",
-                    border: active ? "2px solid #0066cc" : "2px solid #e0e0e0",
-                    borderRadius: "10px",
-                    cursor: "pointer",
-                    background: active ? "#f0f6ff" : "#fff",
-                    textAlign: "center",
-                    transition: "all 0.15s",
-                    userSelect: "none",
-                  }}
+                  style={optionCardStyle(active)}
                 >
-                  <div style={{ fontSize: "32px", marginBottom: "8px" }}>{snd.emoji}</div>
-                  <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>{snd.name}</div>
-                  <div style={{ fontSize: "12px", color: "#666" }}>{snd.desc}</div>
-                  {active && <div style={{ marginTop: "8px", fontSize: "11px", color: "#0066cc", fontWeight: 600 }}>✓ Selected</div>}
-                </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                    <div style={{ fontSize: "28px", lineHeight: 1 }}>{snd.emoji}</div>
+                    {active && (
+                      <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{snd.name}</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>{snd.desc}</div>
+                </button>
               );
             })}
-          </div>
-        </s-box>
-      </s-section>
+        </div>
+      </section>
 
-      {/* Step 3: Preview + Save */}
-      {canAdd && (
-        <s-section heading="Step 3 — Preview & Save">
-          <s-box padding="base">
-            <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
-              {/* Preview box */}
-              <div
-                ref={previewBoxRef}
-                style={{
-                  flex: "0 0 auto",
-                  width: "160px",
-                  height: "160px",
-                  background: "#f9f9f9",
-                  border: "2px dashed #ccc",
-                  borderRadius: "12px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
+      <section style={stepCardStyle}>
+        <div style={{ marginBottom: "16px" }}>
+          <h2 style={sectionTitle}>Step 3: Preview and save</h2>
+          <p style={{ ...mutedText, margin: 0 }}>
+            {canAdd
+              ? "Preview the final add-to-cart experience, then save it to your animation list."
+              : "Choose one animation and one sound to enable preview and save."}
+          </p>
+        </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+                gap: "20px",
+                alignItems: "stretch",
+              }}
+            >
+              <button
+                type="button"
                 onClick={handlePreview}
+                disabled={!canAdd || isPlaying}
+                style={{
+                  ...card,
+                  background: "#f8fafc",
+                  padding: "18px",
+                  cursor: !canAdd || isPlaying ? "not-allowed" : "pointer",
+                  minHeight: "230px",
+                  opacity: canAdd ? 1 : 0.72,
+                  textAlign: "center",
+                }}
               >
-                <div ref={cartRef} style={{ fontSize: "48px" }}>🛒</div>
-                <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>{isPlaying ? "Playing..." : "▶ Click to preview"}</div>
-              </div>
-
-              {/* Summary + save */}
-              <div style={{ flex: 1 }}>
-                <div style={{ marginBottom: "12px" }}>
-                  <div style={{ fontSize: "13px", color: "#666", marginBottom: "4px" }}>Selected combination</div>
-                  <div style={{ fontSize: "16px", fontWeight: 600 }}>
-                    {ANIMATIONS.find(a => a.key === selectedAnimation)?.emoji}{" "}
-                    {ANIMATIONS.find(a => a.key === selectedAnimation)?.name}
-                    {" + "}
-                    {SOUNDS.find(s => s.key === selectedSound)?.emoji}{" "}
-                    {SOUNDS.find(s => s.key === selectedSound)?.name}
-                  </div>
-                </div>
-                <Form method="POST">
-                  <input type="hidden" name="animationKey" value={selectedAnimation ?? ""} />
-                  <input type="hidden" name="soundKey"     value={selectedSound ?? ""} />
-                  <button
-                    type="submit"
-                    disabled={isSaving}
+                <div
+                  ref={previewBoxRef}
+                  style={{
+                    width: "100%",
+                    height: "220px",
+                    margin: "0",
+                    background: "linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)",
+                    border: "1px solid #e3e3e3",
+                    borderRadius: "14px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    position: "relative",
+                    overflow: "hidden",
+                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.8), 0 10px 24px rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <div
                     style={{
-                      padding: "10px 28px",
-                      background: isSaving ? "#999" : "#0066cc",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      fontSize: "14px",
-                      fontWeight: 600,
-                      cursor: isSaving ? "not-allowed" : "pointer",
+                      position: "absolute",
+                      left: "24px",
+                      top: "50%",
+                      width: "54px",
+                      height: "54px",
+                      transform: "translateY(-50%)",
+                      borderRadius: "12px",
+                      background: "linear-gradient(135deg,#f8fafc 0%,#ffffff 48%,#e9f5ff 100%)",
+                      border: "2px solid #ffffff",
+                      boxShadow: "0 10px 22px rgba(17,24,39,0.16)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    {isSaving ? "Saving..." : "Add to My Animations"}
-                  </button>
-                  <div style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>
-                    Then go to My Animations to set it live on your store
+                    <div style={{ width: "34px", height: "34px", borderRadius: "9px", background: "#111827", position: "relative", boxShadow: "inset 0 -8px 0 rgba(255,255,255,0.14)" }}>
+                      <div style={{ position: "absolute", left: "8px", right: "8px", top: "-6px", height: "12px", border: "2px solid #111827", borderBottom: 0, borderRadius: "12px 12px 0 0" }} />
+                      <div style={{ position: "absolute", left: "10px", top: "12px", width: "14px", height: "3px", borderRadius: "999px", background: "#ffffff" }} />
+                    </div>
+                  </div>
+                  <div
+                    ref={cartRef}
+                    style={{
+                      width: "74px",
+                      height: "74px",
+                      borderRadius: "20px",
+                      background: "#111827",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "40px",
+                      lineHeight: "1",
+                      boxShadow: "0 16px 30px rgba(17,24,39,0.22)",
+                    }}
+                  >
+                    🛒
+                  </div>
+                </div>
+                <div style={{ marginTop: "14px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
+                  {!canAdd ? "Select animation and sound" : isPlaying ? "Preview playing" : "Preview animation"}
+                </div>
+                <div style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
+                  {canAdd ? "Plays with the selected sound" : "Preview button unlocks after both choices"}
+                </div>
+              </button>
+
+              <div
+                style={{
+                  ...card,
+                  padding: "20px",
+                  minHeight: "230px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
+                }}
+              >
+                <div>
+                  <div style={{ ...mutedText, fontWeight: 800, marginBottom: "12px", textTransform: "uppercase" }}>
+                    Selected combination
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+                    <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
+                      <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedAnimationOption?.emoji ?? "—"}</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{selectedAnimationOption?.name ?? "Choose animation"}</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Animation</div>
+                    </div>
+                    <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
+                      <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedSoundOption?.emoji ?? "—"}</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{selectedSoundOption?.name ?? "Choose sound"}</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Sound</div>
+                    </div>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#4b5563", lineHeight: "1.5" }}>
+                    Save this pair to My Animations, then choose which saved animation is live on the storefront.
+                  </p>
+                </div>
+
+                <Form method="POST" style={{ marginTop: "18px" }}>
+                  <input type="hidden" name="animationKey" value={selectedAnimation ?? ""} />
+                  <input type="hidden" name="soundKey" value={selectedSound ?? ""} />
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={handlePreview}
+                      disabled={!canAdd || isPlaying}
+                      style={{
+                        ...secondaryButton,
+                        minHeight: "40px",
+                        cursor: !canAdd || isPlaying ? "not-allowed" : "pointer",
+                        opacity: !canAdd ? 0.55 : 1,
+                      }}
+                    >
+                      {isPlaying ? "Playing..." : "Preview"}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!canAdd || isSaving}
+                      style={{
+                        ...primaryButton,
+                        minHeight: "40px",
+                        background: isSaving ? "#8a8a8a" : "#111827",
+                        cursor: !canAdd || isSaving ? "not-allowed" : "pointer",
+                        opacity: !canAdd ? 0.55 : 1,
+                      }}
+                    >
+                      {isSaving ? "Saving..." : "Add to My Animations"}
+                    </button>
                   </div>
                 </Form>
               </div>
             </div>
-          </s-box>
-
-
-        </s-section>
-      )}
+      </section>
+      </div>
     </s-page>
   );
 }
