@@ -1,4 +1,6 @@
-import { Link } from "react-router";
+import type { HeadersFunction } from "react-router";
+import { Link, useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   cardPadding,
   mutedText,
@@ -99,3 +101,9 @@ export default function Help() {
     </s-page>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);

@@ -1,5 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRouteError, Form } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -531,4 +531,8 @@ export default function ConfigurePage() {
   );
 }
 
-export const headers = (headersArgs: any) => boundary.headers(headersArgs);
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);

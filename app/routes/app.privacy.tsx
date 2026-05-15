@@ -1,3 +1,6 @@
+import type { HeadersFunction } from "react-router";
+import { useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { cardPadding, mutedText, narrowPageShell, sectionTitle } from "../styles/ui";
 
 const sections = [
@@ -63,3 +66,9 @@ export default function Privacy() {
     </s-page>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);
