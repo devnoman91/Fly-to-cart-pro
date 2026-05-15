@@ -135,7 +135,6 @@ export default function AnimationsPage() {
       <s-button slot="primary-action" onClick={() => navigate("/app/configure")}>
         Create Animation
       </s-button>
-      <s-link slot="breadcrumbs" onClick={() => navigate("/app")}>Home</s-link>
 
       <div style={pageShell}>
         {actionData?.success === false && actionData.error && (

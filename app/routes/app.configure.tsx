@@ -268,7 +268,6 @@ export default function ConfigurePage() {
       <s-button slot="primary-action" onClick={() => navigate("/app/animations")} variant="secondary">
         My Animations
       </s-button>
-      <s-link slot="breadcrumbs" onClick={() => navigate("/app")}>Home</s-link>
 
       <div style={pageShell}>
       <div style={{ ...cardPadding, marginBottom: "16px" }}>
