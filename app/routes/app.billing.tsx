@@ -4,6 +4,7 @@ import { Form, useLoaderData, useActionData, useRouteError } from "react-router"
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getCurrentPlan, requestPlan, cancelPlan } from "../services/billing.server";
+import { card, mutedText, narrowPageShell, sectionTitle } from "../styles/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -91,16 +92,14 @@ export default function BillingPage() {
   ];
 
   const cardStyle: React.CSSProperties = {
-    background: "#fff",
-    border: "1px solid #000",
-    borderRadius: "8px",
+    ...card,
     padding: "32px",
   };
 
   const btnStyle: React.CSSProperties = {
     width: "100%",
     padding: "14px",
-    background: "#000",
+    background: "#111827",
     color: "#fff",
     border: "none",
     borderRadius: "6px",
@@ -110,15 +109,15 @@ export default function BillingPage() {
   };
 
   return (
-    <div style={{ padding: "48px 24px", background: "#f9f9f9", minHeight: "100vh" }}>
-      <div style={{ maxWidth: "640px", margin: "0 auto" }}>
+    <s-page heading="Billing">
+      <div style={narrowPageShell}>
 
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "48px" }}>
-          <h1 style={{ fontSize: "36px", fontWeight: 700, color: "#000", marginBottom: "12px" }}>
+        <div style={{ marginBottom: "18px" }}>
+          <h1 style={{ fontSize: "24px", fontWeight: 750, color: "#111827", margin: "0 0 6px" }}>
             Fly to Cart Pro
           </h1>
-          <p style={{ fontSize: "16px", color: "#555", margin: 0 }}>
+          <p style={{ ...mutedText, margin: 0 }}>
             One plan. Every feature. $3&nbsp;/&nbsp;month.
           </p>
         </div>
@@ -144,7 +143,7 @@ export default function BillingPage() {
 
         {/* Trial banner */}
         {isActive && (
-          <div style={{ ...cardStyle, marginBottom: "32px", background: "#f9f9f9" }}>
+          <div style={{ ...cardStyle, marginBottom: "16px", background: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
               {trialDaysLeft !== null && trialDaysLeft > 0 ? (
                 <div>
@@ -163,30 +162,30 @@ export default function BillingPage() {
                   </p>
                 </div>
               )}
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 12px", background: "#000", borderRadius: "20px", color: "#fff", fontSize: "12px", fontWeight: 600 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "12px", fontWeight: 600 }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#28a745", display: "inline-block" }} />
                 Active
               </div>
             </div>
             {trialDaysLeft !== null && trialDaysLeft > 0 && (
               <div style={{ background: "#e0e0e0", borderRadius: "4px", height: "6px", overflow: "hidden" }}>
-                <div style={{ background: "#000", height: "100%", width: `${trialProgress}%`, transition: "width 0.3s" }} />
+                <div style={{ background: "#111827", height: "100%", width: `${trialProgress}%`, transition: "width 0.3s" }} />
               </div>
             )}
           </div>
         )}
 
         {/* Plan card */}
-        <div style={{ ...cardStyle, marginBottom: "32px", borderWidth: isActive ? "2px" : "1px" }}>
+        <div style={{ ...cardStyle, marginBottom: "16px", borderWidth: isActive ? "2px" : "1px", borderColor: isActive ? "#111827" : "#d7d7d7" }}>
           {isActive && (
-            <div style={{ display: "inline-block", padding: "4px 12px", background: "#000", borderRadius: "20px", color: "#fff", fontSize: "11px", fontWeight: 700, marginBottom: "16px" }}>
+            <div style={{ display: "inline-block", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "11px", fontWeight: 700, marginBottom: "16px" }}>
               CURRENT PLAN
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
             <div>
-              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 700, color: "#000" }}>Pro</h2>
-              <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>Full access. No restrictions.</p>
+              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 750, color: "#111827" }}>Pro</h2>
+              <p style={{ ...mutedText, margin: 0 }}>Full access. No restrictions.</p>
             </div>
             <div style={{ textAlign: "right" }}>
               <span style={{ fontSize: "36px", fontWeight: 800, color: "#000" }}>$3</span>
@@ -197,7 +196,7 @@ export default function BillingPage() {
           <div style={{ borderTop: "1px solid #e8e8e8", paddingTop: "20px", marginBottom: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
             {features.map((f, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#333" }}>
-                <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#000", color: "#fff", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✓</span>
+                <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#111827", color: "#fff", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✓</span>
                 {f}
               </div>
             ))}
@@ -236,7 +235,7 @@ export default function BillingPage() {
 
         {/* FAQ */}
         <div style={cardStyle}>
-          <h3 style={{ margin: "0 0 20px 0", fontSize: "16px", fontWeight: 600, color: "#000" }}>
+          <h3 style={sectionTitle}>
             Frequently Asked Questions
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
@@ -257,11 +256,11 @@ export default function BillingPage() {
           </div>
         </div>
 
-        <p style={{ textAlign: "center", marginTop: "32px", color: "#bbb", fontSize: "12px" }}>
+        <p style={{ textAlign: "center", marginTop: "20px", color: "#9ca3af", fontSize: "12px" }}>
           All charges billed in USD via Shopify. Cancel any time.
         </p>
       </div>
-    </div>
+    </s-page>
   );
 }
 

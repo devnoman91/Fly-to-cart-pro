@@ -14,7 +14,16 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body>
+      <body
+        style={{
+          margin: 0,
+          background: "#f6f6f7",
+          color: "#111827",
+          fontFamily:
+            "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          WebkitFontSmoothing: "antialiased",
+        }}
+      >
         <Outlet />
         <ScrollRestoration />
         <Scripts />
