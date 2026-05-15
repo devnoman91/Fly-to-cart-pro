@@ -1,6 +1,6 @@
 import React from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useRouteError } from "react-router";
+import { useLoaderData, useRouteError, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchConfigurations } from "../utils/shopify-graphql";
@@ -23,6 +23,7 @@ const SOUND_NAMES: Record<string, string> = {
 
 export default function Index() {
   const { liveConfig, totalCount, shop } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
 
   const hasConfigs = totalCount > 0;
   const isLive = !!liveConfig;
@@ -152,7 +153,7 @@ export default function Index() {
                   <button
                     style={buttonStyle}
                     onClick={() =>
-                      (window.location.href = isLive || hasConfigs ? "/app/animations" : "/app/configure")
+                      navigate(isLive || hasConfigs ? "/app/animations" : "/app/configure")
                     }
                     onMouseEnter={(e) => {
                       (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
@@ -275,7 +276,7 @@ export default function Index() {
                     ) : (
                       <button
                         style={{ ...buttonStyle, marginTop: "10px" }}
-                        onClick={() => (window.location.href = step.href!)}
+                        onClick={() => navigate(step.href!)}
                         onMouseEnter={(e) => {
                           (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
                         }}
@@ -306,7 +307,7 @@ export default function Index() {
             </div>
             <button
               style={buttonStyle}
-              onClick={() => (window.location.href = "/app/configure")}
+              onClick={() => navigate("/app/configure")}
               onMouseEnter={(e) => {
                 (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
               }}
@@ -331,7 +332,7 @@ export default function Index() {
                 </p>
                 <button
                   style={buttonStyle}
-                  onClick={() => (window.location.href = "/app/animations")}
+                  onClick={() => navigate("/app/animations")}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLElement).style.backgroundColor = "#333";
                   }}

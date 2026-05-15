@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -67,6 +67,7 @@ export default function ConfigurePage() {
   const actionData  = useActionData<typeof action>();
   const navigation  = useNavigation();
   const shopify     = useAppBridge();
+  const navigate    = useNavigate();
   const isSaving    = navigation.state === "submitting";
 
   const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
@@ -212,10 +213,10 @@ export default function ConfigurePage() {
 
   return (
     <s-page heading="Configure Animation">
-      <s-button slot="primary-action" onClick={() => (window.location.href = "/app/animations")} variant="secondary">
+      <s-button slot="primary-action" onClick={() => navigate("/app/animations")} variant="secondary">
         My Animations
       </s-button>
-      <s-button slot="secondary-action" onClick={() => (window.location.href = "/app")}>
+      <s-button slot="secondary-action" onClick={() => navigate("/app")}>
         Back
       </s-button>
 
