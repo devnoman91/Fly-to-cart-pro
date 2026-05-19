@@ -50,7 +50,7 @@ export default function Index() {
   const isLive = Boolean(liveConfig);
 
   const API_KEY = "9620563a9ea6bc8e3f91ec87e893f4e8";
-  const EMBED_HANDLE = "add-to-cart";
+  const EMBED_HANDLE = "app_embed";
   const appEmbedDeepLink = `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${API_KEY}/${EMBED_HANDLE}`;
 
   const steps = [

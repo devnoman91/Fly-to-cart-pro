@@ -64,8 +64,8 @@ export default function BillingPage() {
   const trialProgress = trialDaysLeft === null ? 100 : Math.min(((14 - trialDaysLeft) / 14) * 100, 100);
 
   const features = [
-    "All 5 animation styles (Slide In, Bounce, Flip, Pulse, Spiral)",
-    "All 5 sound effects (Chime, Whoosh, Pop, Bell, Sparkle)",
+    "All 8 animation styles (Slide In, Bounce, Flip, Pulse, Spiral)",
+    "All 8 sound effects (Chime, Whoosh, Pop, Bell, Sparkle)",
     "Unlimited animation saves",
     "One-click live/stop toggle",
     "App embed for any Shopify theme",
