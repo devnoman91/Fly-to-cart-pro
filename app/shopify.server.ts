@@ -8,6 +8,10 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+console.log("[FTC:shopify.server] API version:", ApiVersion.October25);
+console.log("[FTC:shopify.server] SCOPES from env:", process.env.SCOPES);
+console.log("[FTC:shopify.server] APP_URL:", process.env.SHOPIFY_APP_URL);
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -30,7 +34,7 @@ const shopify = shopifyApp({
     },
   },
   future: {
-    expiringOfflineAccessTokens: false,
+    expiringOfflineAccessTokens: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

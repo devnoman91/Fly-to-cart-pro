@@ -243,21 +243,24 @@ export type FtcConfig = {
   live: boolean;
 };
 
-async function getShopId(admin: any): Promise<string> {
-  const result = await executeGraphQL<{ shop: { id: string } }>(admin, `query { shop { id } }`);
-  return result.shop.id;
+async function getAppInstallationId(admin: any): Promise<string> {
+  const result = await executeGraphQL<{ currentAppInstallation: { id: string } }>(
+    admin,
+    `query { currentAppInstallation { id } }`
+  );
+  return result.currentAppInstallation.id;
 }
 
 export async function fetchConfigurations(admin: any): Promise<FtcConfig[]> {
   const query = `
     query {
-      shop {
+      currentAppInstallation {
         metafield(namespace: "fly_to_cart", key: "configurations") { value }
       }
     }
   `;
-  const result = await executeGraphQL<{ shop: any }>(admin, query);
-  const raw = result.shop?.metafield?.value;
+  const result = await executeGraphQL<{ currentAppInstallation: any }>(admin, query);
+  const raw = result.currentAppInstallation?.metafield?.value;
   if (!raw) return [];
   try {
     return JSON.parse(raw) as FtcConfig[];
@@ -267,9 +270,7 @@ export async function fetchConfigurations(admin: any): Promise<FtcConfig[]> {
 }
 
 export async function saveConfigurations(admin: any, configs: FtcConfig[]): Promise<void> {
-  const shopId = await getShopId(admin);
-  console.log(`[FlyToCart] saveConfigurations — shopId: ${shopId}, count: ${configs.length}`);
-  console.log(`[FlyToCart] saveConfigurations — data:`, JSON.stringify(configs));
+  const appInstallationId = await getAppInstallationId(admin);
 
   const query = `
     mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -282,7 +283,7 @@ export async function saveConfigurations(admin: any, configs: FtcConfig[]): Prom
 
   const result = await executeGraphQL<any>(admin, query, {
     metafields: [{
-      ownerId: shopId,
+      ownerId: appInstallationId,
       namespace: "fly_to_cart",
       key: "configurations",
       type: "json",
@@ -290,12 +291,10 @@ export async function saveConfigurations(admin: any, configs: FtcConfig[]): Prom
     }],
   });
 
-  const { metafields, userErrors } = result.metafieldsSet ?? {};
+  const { userErrors } = result.metafieldsSet ?? {};
   if (userErrors?.length > 0) {
-    console.error(`[FlyToCart] saveConfigurations — userErrors:`, JSON.stringify(userErrors));
     throw new Error(userErrors.map((e: any) => e.message).join(', '));
   }
-  console.log(`[FlyToCart] saveConfigurations — stored:`, JSON.stringify(metafields));
 }
 
 export async function fetchGlobalConfig(admin: any) {
