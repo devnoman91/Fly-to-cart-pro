@@ -6,6 +6,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getCurrentPlan, requestPlan, cancelPlan } from "../services/billing.server";
 import { card, mutedText, narrowPageShell, sectionTitle } from "../styles/ui";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const subscription = await getCurrentPlan(request);
@@ -20,12 +24,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "subscribe") {
     try {
       return await requestPlan(request);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof Response) throw err;
-      if (err?.message === "BILLING_UNAVAILABLE") {
+      if (getErrorMessage(err, "") === "BILLING_UNAVAILABLE") {
         return { error: "Billing is not available yet. Set your app to Public distribution in the Shopify Partner Dashboard first." };
       }
-      return { error: err?.message || "Failed to start subscription." };
+      return { error: getErrorMessage(err, "Failed to start subscription.") };
     }
   }
 
@@ -33,8 +37,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       await cancelPlan(request);
       return { success: "Subscription cancelled." };
-    } catch (err: any) {
-      return { error: err?.message || "Failed to cancel." };
+    } catch (err: unknown) {
+      return { error: getErrorMessage(err, "Failed to cancel.") };
     }
   }
 
@@ -158,7 +162,9 @@ export default function BillingPage() {
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>Subscription active</h3>
                   <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
-                    Next billing: {formatDate(subscription?.billingOn)}
+                    {subscription?.billingOn
+                      ? `Next billing: ${formatDate(subscription.billingOn)}`
+                      : "Pro plan approved and active through Shopify."}
                   </p>
                 </div>
               )}
@@ -185,7 +191,9 @@ export default function BillingPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
             <div>
               <h2 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 750, color: "#111827" }}>Pro</h2>
-              <p style={{ ...mutedText, margin: 0 }}>Full access. No restrictions.</p>
+              <p style={{ ...mutedText, margin: 0 }}>
+                {isActive ? "Your Pro plan is active. Full access is enabled." : "Full access. No restrictions."}
+              </p>
             </div>
             <div style={{ textAlign: "right" }}>
               <span style={{ fontSize: "36px", fontWeight: 800, color: "#000" }}>$3</span>
