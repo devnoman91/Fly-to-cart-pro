@@ -243,24 +243,16 @@ export type FtcConfig = {
   live: boolean;
 };
 
-async function getAppInstallationId(admin: any): Promise<string> {
-  const result = await executeGraphQL<{ currentAppInstallation: { id: string } }>(
-    admin,
-    `query { currentAppInstallation { id } }`
-  );
-  return result.currentAppInstallation.id;
-}
-
 export async function fetchConfigurations(admin: any): Promise<FtcConfig[]> {
   const query = `
     query {
-      currentAppInstallation {
+      shop {
         metafield(namespace: "fly_to_cart", key: "configurations") { value }
       }
     }
   `;
-  const result = await executeGraphQL<{ currentAppInstallation: any }>(admin, query);
-  const raw = result.currentAppInstallation?.metafield?.value;
+  const result = await executeGraphQL<{ shop: any }>(admin, query);
+  const raw = result.shop?.metafield?.value;
   if (!raw) return [];
   try {
     return JSON.parse(raw) as FtcConfig[];
@@ -270,7 +262,11 @@ export async function fetchConfigurations(admin: any): Promise<FtcConfig[]> {
 }
 
 export async function saveConfigurations(admin: any, configs: FtcConfig[]): Promise<void> {
-  const appInstallationId = await getAppInstallationId(admin);
+  const shopResult = await executeGraphQL<{ shop: { id: string } }>(
+    admin,
+    `query { shop { id } }`
+  );
+  const shopId = shopResult.shop.id;
 
   const query = `
     mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -283,7 +279,7 @@ export async function saveConfigurations(admin: any, configs: FtcConfig[]): Prom
 
   const result = await executeGraphQL<any>(admin, query, {
     metafields: [{
-      ownerId: appInstallationId,
+      ownerId: shopId,
       namespace: "fly_to_cart",
       key: "configurations",
       type: "json",

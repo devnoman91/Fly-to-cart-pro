@@ -92,9 +92,23 @@ export async function requestPlan(request: Request) {
 }
 
 export async function cancelPlan(request: Request) {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
 
   if (!session?.shop) throw new Error("No shop session found");
+
+  // Cancel with Shopify first so the merchant is prorated correctly
+  try {
+    // @ts-ignore billing plan type not inferred across module boundary
+    const response = await billing.check({ plan: PLAN_PRO, isTest: IS_TEST });
+    const subscription = response?.appSubscriptions?.[0];
+    if (subscription?.id) {
+      // @ts-ignore
+      await billing.cancel({ subscriptionId: subscription.id, isTest: IS_TEST, prorate: true });
+    }
+  } catch (err: any) {
+    if (err instanceof Response) throw err;
+    // If no active subscription exists there is nothing to cancel via API
+  }
 
   await prisma.subscription.update({
     where: { shop: session.shop },
