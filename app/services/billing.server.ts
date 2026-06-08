@@ -4,14 +4,7 @@ import { redirect } from "react-router";
 
 export const PLAN_PRO = "pro" as const;
 
-const IS_TEST = process.env.NODE_ENV !== "production";
-const APP_HANDLE = process.env.SHOPIFY_APP_HANDLE || "fly-to-cart-pro";
-const APP_PRICING_HANDLES = new Set(
-  (process.env.SHOPIFY_APP_PRICING_PLAN_HANDLES || `${PLAN_PRO},shopify-test`)
-    .split(",")
-    .map((handle) => normalizePlanHandle(handle))
-    .filter(Boolean)
-);
+const IS_TEST = true;
 
 type CurrentPlan = {
   planName: string | null;
@@ -37,33 +30,12 @@ type BillingApi = {
   cancel(options: { subscriptionId: string; isTest: boolean; prorate: boolean }): Promise<unknown>;
 };
 
-function normalizePlanHandle(handle: string | null | undefined) {
-  return handle?.trim().toLowerCase().replace(/[\s_]+/g, "-") || "";
-}
-
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error && "errorData" in error) {
     return JSON.stringify(error.errorData);
   }
   return "";
-}
-
-function planFromAppPricingRedirect(request: Request, shop: string): CurrentPlan | null {
-  const url = new URL(request.url);
-  const redirectShop = url.searchParams.get("shop");
-  const planHandle = url.searchParams.get("plan_handle");
-
-  if (redirectShop && redirectShop !== shop) return null;
-  if (!APP_PRICING_HANDLES.has(normalizePlanHandle(planHandle))) return null;
-
-  return {
-    planName: PLAN_PRO,
-    status: "active",
-    trialEndsAt: null,
-    billingOn: null,
-    billingUnavailable: false,
-  };
 }
 
 async function persistPlan(shop: string, plan: CurrentPlan) {
@@ -91,7 +63,6 @@ export async function getCurrentPlan(request: Request) {
 
   if (!session?.shop) throw new Error("No shop session found");
 
-  const appPricingRedirectPlan = planFromAppPricingRedirect(request, session.shop);
   const cachedPlan = await prisma.subscription.findUnique({ where: { shop: session.shop } });
 
   let activePlan: CurrentPlan = {
@@ -130,12 +101,6 @@ export async function getCurrentPlan(request: Request) {
     // All other errors (plan not yet subscribed) — activePlan stays null
   }
 
-  // Shopify App Pricing redirects back with plan_handle. Use it immediately so
-  // the UI reflects an approved Pro plan even before any reconciliation runs.
-  if (!activePlan.status && appPricingRedirectPlan) {
-    activePlan = appPricingRedirectPlan;
-  }
-
   if (
     !activePlan.status &&
     !activePlan.billingUnavailable &&
@@ -165,8 +130,7 @@ export async function requestPlan(request: Request) {
   if (!session?.shop) throw new Error("No shop session found");
 
   const shopName = session.shop.replace(".myshopify.com", "");
-  const returnUrl = `https://admin.shopify.com/store/${shopName}/apps/fly-to-cart-pro/app/billing`;
-  const appPricingUrl = `https://admin.shopify.com/store/${shopName}/charges/${APP_HANDLE}/pricing_plans`;
+  const returnUrl = `https://admin.shopify.com/store/${shopName}/apps/fly-to-cart-pro/app/billing?subscribed=1`;
 
   try {
     // billing.request() throws a redirect on success — do NOT catch that
@@ -176,9 +140,6 @@ export async function requestPlan(request: Request) {
     if (err instanceof Response) throw err; // let the redirect through
     if (msg.includes("public distribution")) {
       throw new Error("BILLING_UNAVAILABLE");
-    }
-    if (msg.toLowerCase().includes("managed") || msg.toLowerCase().includes("app pricing")) {
-      throw redirect(appPricingUrl);
     }
     throw err;
   }
