@@ -240,6 +240,7 @@ export type FtcConfig = {
   id: string;
   animationKey: string;
   soundKey: string;
+  customSoundUrl?: string;
   live: boolean;
 };
 

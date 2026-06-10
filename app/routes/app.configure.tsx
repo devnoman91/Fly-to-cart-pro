@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, useNavigate, useRouteError, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRouteError, Form, useFetcher } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -69,16 +69,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const formData = await request.formData();
-    const animationKey = formData.get("animationKey") as string;
-    const soundKey     = formData.get("soundKey") as string;
+    const animationKey  = formData.get("animationKey") as string;
+    const soundKey      = formData.get("soundKey") as string;
+    const customSoundUrl = (formData.get("customSoundUrl") as string) || undefined;
 
     if (!animationKey || !soundKey) return { success: false, error: "Select both animation and sound" };
+
+    if (soundKey === "custom" && !customSoundUrl) {
+      return { success: false, error: "Upload a custom sound file before saving" };
+    }
 
     const configs = await fetchConfigurations(admin);
     const newConfig: FtcConfig = {
       id: Date.now().toString(),
       animationKey,
       soundKey,
+      ...(customSoundUrl ? { customSoundUrl } : {}),
       live: false,
     };
     await saveConfigurations(admin, [...configs, newConfig]);
@@ -98,11 +104,29 @@ export default function ConfigurePage() {
   const navigate    = useNavigate();
   const isSaving    = navigation.state === "submitting";
 
+  const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
+
   const [selectedAnimation, setSelectedAnimation] = useState<string | null>(null);
   const [selectedSound,     setSelectedSound]      = useState<string | null>(null);
-  const [isPlaying,         setIsPlaying]          = useState(false);
+  const [customSoundUrl,    setCustomSoundUrl]      = useState<string | null>(null);
+  const [customFileName,    setCustomFileName]      = useState<string>("");
+  const [isPlaying,         setIsPlaying]           = useState(false);
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const cartRef       = useRef<HTMLDivElement>(null);
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+
+  const isUploading = uploadFetcher.state !== "idle";
+
+  // Handle upload result
+  useEffect(() => {
+    if (uploadFetcher.state === "idle" && uploadFetcher.data) {
+      if (uploadFetcher.data.url) {
+        setCustomSoundUrl(uploadFetcher.data.url);
+      } else if (uploadFetcher.data.error) {
+        shopify.toast.show(uploadFetcher.data.error, { isError: true, duration: 5000 });
+      }
+    }
+  }, [uploadFetcher.state, uploadFetcher.data]);
 
   useEffect(() => {
     if (!actionData) return;
@@ -113,9 +137,37 @@ export default function ConfigurePage() {
     }
   }, [actionData]);
 
-  const canAdd = Boolean(selectedAnimation && selectedSound);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCustomFileName(file.name);
+    setCustomSoundUrl(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    uploadFetcher.submit(fd, {
+      method: "post",
+      action: "/api/sound-upload",
+      encType: "multipart/form-data",
+    });
+  };
+
+  const canAdd = Boolean(
+    selectedAnimation &&
+    selectedSound &&
+    (selectedSound !== "custom" || customSoundUrl),
+  );
 
   const playSound = (soundKey: string) => {
+    if (soundKey === "custom") {
+      if (customSoundUrl) {
+        try {
+          const audio = new Audio(customSoundUrl);
+          audio.volume = 0.8;
+          audio.play().catch(() => {});
+        } catch {}
+      }
+      return;
+    }
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const now = ctx.currentTime;
@@ -138,7 +190,6 @@ export default function ConfigurePage() {
     const cartEl = cartRef.current;
     if (!box || !cartEl) return;
 
-    // Pulse: no bubble, just animate the cart icon directly
     if (animKey === 'pulse') {
       cartEl.animate([
         { transform: 'scale(1)' },
@@ -156,7 +207,6 @@ export default function ConfigurePage() {
     const bubbleSize = 54;
     const targetX = (boxWidth / 2) - bubbleLeft - (bubbleSize / 2);
 
-    // Create a small product tile that flies from left to the cart in the center.
     const bubble = document.createElement('div');
     bubble.style.cssText = [
       'position:absolute',
@@ -260,8 +310,10 @@ export default function ConfigurePage() {
     setTimeout(() => setIsPlaying(false), 1400);
   };
 
-  const selectedAnimationOption = ANIMATIONS.find((animation) => animation.key === selectedAnimation);
-  const selectedSoundOption = SOUNDS.find((sound) => sound.key === selectedSound);
+  const selectedAnimationOption = ANIMATIONS.find((a) => a.key === selectedAnimation);
+  const selectedSoundOption = selectedSound === "custom"
+    ? { name: customFileName ? `Custom: ${customFileName}` : "Custom Sound", emoji: "🎵" }
+    : SOUNDS.find((s) => s.key === selectedSound);
 
   return (
     <s-page heading="Configure Animation">
@@ -358,7 +410,156 @@ export default function ConfigurePage() {
                 </button>
               );
             })}
+
+            {/* Custom upload card */}
+            {(() => {
+              const active = selectedSound === "custom";
+              return (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSound("custom")}
+                  style={{
+                    ...optionCardStyle(active),
+                    minHeight: "142px",
+                    background: active ? "#f8fafc" : "#fff",
+                    border: active
+                      ? "2px solid #111827"
+                      : "1px dashed #d7d7d7",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
+                    <div style={{ fontSize: "28px", lineHeight: 1 }}>🎵</div>
+                    {active && (
+                      <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
+                        Selected
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>Custom Upload</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>Upload your own MP3, WAV, or OGG</div>
+                </button>
+              );
+            })()}
         </div>
+
+        {/* File upload area — shown only when custom is selected */}
+        {selectedSound === "custom" && (
+          <div
+            style={{
+              marginTop: "16px",
+              border: "1px solid #e5e7eb",
+              borderRadius: "10px",
+              padding: "20px",
+              background: "#fafafa",
+            }}
+          >
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontWeight: 700, fontSize: "14px", color: "#111827", marginBottom: "4px" }}>
+                Upload sound file
+              </div>
+              <div style={{ ...mutedText }}>MP3, WAV, OGG, or AAC — max 5 MB</div>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/ogg,audio/mp4,audio/aac,audio/x-wav"
+              onChange={handleFileChange}
+              style={{ display: "none" }}
+            />
+
+            {/* Not yet uploaded */}
+            {!customSoundUrl && !isUploading && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  ...secondaryButton,
+                  gap: "8px",
+                }}
+              >
+                Choose file
+              </button>
+            )}
+
+            {/* Uploading */}
+            {isUploading && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    border: "2px solid #e5e7eb",
+                    borderTopColor: "#111827",
+                    borderRadius: "50%",
+                    animation: "spin 0.7s linear infinite",
+                  }}
+                />
+                <span style={{ fontSize: "13px", color: "#374151" }}>
+                  Uploading {customFileName}…
+                </span>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
+
+            {/* Upload done */}
+            {customSoundUrl && !isUploading && (
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#dcfce7",
+                    border: "1px solid #86efac",
+                    borderRadius: "8px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    color: "#166534",
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>✓</span>
+                  <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {customFileName}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => playSound("custom")}
+                  style={{ ...secondaryButton, gap: "6px", fontSize: "13px" }}
+                >
+                  ▶ Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomSoundUrl(null);
+                    setCustomFileName("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  style={{ ...secondaryButton, color: "#b42318", borderColor: "#f1b7b0", fontSize: "13px" }}
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+
+            {/* Upload error */}
+            {uploadFetcher.state === "idle" && uploadFetcher.data?.error && !customSoundUrl && (
+              <div style={{ marginTop: "10px", color: "#b42318", fontSize: "13px" }}>
+                {uploadFetcher.data.error}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ marginLeft: "10px", ...secondaryButton, fontSize: "12px", minHeight: "30px", padding: "0 10px" }}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section style={stepCardStyle}>
@@ -367,7 +568,9 @@ export default function ConfigurePage() {
           <p style={{ ...mutedText, margin: 0 }}>
             {canAdd
               ? "Preview the final add-to-cart experience, then save it to your animation list."
-              : "Choose one animation and one sound to enable preview and save."}
+              : selectedSound === "custom" && !customSoundUrl
+                ? "Upload a sound file to enable preview and save."
+                : "Choose one animation and one sound to enable preview and save."}
           </p>
         </div>
             <div
@@ -482,7 +685,9 @@ export default function ConfigurePage() {
                     </div>
                     <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
                       <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedSoundOption?.emoji ?? "—"}</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{selectedSoundOption?.name ?? "Choose sound"}</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {selectedSoundOption?.name ?? "Choose sound"}
+                      </div>
                       <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Sound</div>
                     </div>
                   </div>
@@ -494,6 +699,9 @@ export default function ConfigurePage() {
                 <Form method="POST" style={{ marginTop: "18px" }}>
                   <input type="hidden" name="animationKey" value={selectedAnimation ?? ""} />
                   <input type="hidden" name="soundKey" value={selectedSound ?? ""} />
+                  {selectedSound === "custom" && customSoundUrl && (
+                    <input type="hidden" name="customSoundUrl" value={customSoundUrl} />
+                  )}
                   <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                     <button
                       type="button"

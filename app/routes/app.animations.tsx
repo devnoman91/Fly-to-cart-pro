@@ -37,6 +37,7 @@ const SOUNDS: Record<string, { name: string; icon: string }> = {
   coin: { name: "Coin", icon: "$" },
   laser: { name: "Laser", icon: "/" },
   drum: { name: "Drum", icon: "●" },
+  custom: { name: "Custom", icon: "🎵" },
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -272,9 +273,29 @@ export default function AnimationsPage() {
                             Live
                           </span>
                         )}
+                        {config.soundKey === "custom" && (
+                          <span
+                            style={{
+                              background: "#eff6ff",
+                              border: "1px solid #93c5fd",
+                              borderRadius: "999px",
+                              color: "#1d4ed8",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              padding: "3px 8px",
+                            }}
+                          >
+                            Custom sound
+                          </span>
+                        )}
                       </div>
                       <div style={{ color: "#6b7280", fontSize: "13px", marginTop: "6px" }}>
                         Animation #{index + 1} · Sound {sound.icon} {sound.name}
+                        {config.customSoundUrl && (
+                          <span style={{ marginLeft: "6px", color: "#9ca3af" }}>
+                            · Uploaded file
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
