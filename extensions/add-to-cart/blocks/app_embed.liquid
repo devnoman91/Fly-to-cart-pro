@@ -6,12 +6,16 @@
 
 {% assign animation_key = '' %}
 {% assign sound_key = '' %}
+{% assign custom_sound_url = '' %}
 {% if ftc_configs_raw != blank %}
   {% assign ftc_configs = ftc_configs_raw %}
   {% for cfg in ftc_configs %}
     {% if cfg.live == true %}
       {% assign animation_key = cfg.animationKey %}
       {% assign sound_key = cfg.soundKey %}
+      {% if cfg.customSoundUrl != blank %}
+        {% assign custom_sound_url = cfg.customSoundUrl %}
+      {% endif %}
     {% endif %}
   {% endfor %}
 {% endif %}
@@ -20,8 +24,9 @@
 <script>
 (function () {
   var FTC = {
-    animationKey: {{ animation_key | default: '' | json }},
-    soundKey:     {{ sound_key     | default: '' | json }}
+    animationKey:   {{ animation_key   | default: '' | json }},
+    soundKey:       {{ sound_key       | default: '' | json }},
+    customSoundUrl: {{ custom_sound_url | default: '' | json }}
   };
 
   var audioCtx = null;
@@ -124,9 +129,9 @@ function findAddToCartButton() {
       bubble.textContent = '🛍';
     }
 
-    var from = (img ? img : btn).getBoundingClientRect();
+    var from = btn.getBoundingClientRect();
     var cx = from.left + from.width / 2 - size / 2;
-    var cy = from.top  + from.height/ 2 - size / 2;
+    var cy = from.top  + from.height / 2 - size / 2;
 
     Object.assign(bubble.style, {
       position: 'fixed',
@@ -537,6 +542,16 @@ function doSpiral(btn) {
   /* ─── Sounds ──────────────────────────────────────────── */
 
   function playSound(key) {
+    // Custom uploaded sound — play via Audio element
+    if (key === 'custom' && FTC.customSoundUrl) {
+      try {
+        var a = new Audio(FTC.customSoundUrl);
+        a.volume = 0.8;
+        a.play();
+      } catch(e) {}
+      return;
+    }
+
     try {
       var c = ctx(), t = c.currentTime;
       ({
@@ -548,7 +563,7 @@ function doSpiral(btn) {
         coin:    function() { [1200,1500,1800,1400].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='triangle'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.2,t+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.05+0.12); o.start(t+i*0.05); o.stop(t+i*0.05+0.12); }); },
         laser:   function() { var o=c.createOscillator(),g=c.createGain(); o.type='sawtooth'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(1200,t); o.frequency.exponentialRampToValueAtTime(80,t+0.25); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.start(t); o.stop(t+0.25); },
         drum:    function() { var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(30,t+0.15); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2); o.start(t); o.stop(t+0.2); },
-      })[key]();
+      })[key]?.();
     } catch(e) {}
   }
 
