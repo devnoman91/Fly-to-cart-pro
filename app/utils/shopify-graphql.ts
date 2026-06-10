@@ -236,6 +236,62 @@ export async function createSoundPreset(admin: any, data: any) {
   return result.metaobjectCreate;
 }
 
+export type FtcBranding = {
+  fallbackImageUrl?: string;
+  fallbackBgColor?: string;
+  bubbleMode?: 'product' | 'logo';
+};
+
+export async function fetchBranding(admin: any): Promise<FtcBranding> {
+  const query = `
+    query {
+      shop {
+        metafield(namespace: "fly_to_cart", key: "branding") { value }
+      }
+    }
+  `;
+  const result = await executeGraphQL<{ shop: any }>(admin, query);
+  const raw = result.shop?.metafield?.value;
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as FtcBranding;
+  } catch {
+    return {};
+  }
+}
+
+export async function saveBranding(admin: any, branding: FtcBranding): Promise<void> {
+  const shopResult = await executeGraphQL<{ shop: { id: string } }>(
+    admin,
+    `query { shop { id } }`
+  );
+  const shopId = shopResult.shop.id;
+
+  const query = `
+    mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) {
+        metafields { key value namespace }
+        userErrors { field message code }
+      }
+    }
+  `;
+
+  const result = await executeGraphQL<any>(admin, query, {
+    metafields: [{
+      ownerId: shopId,
+      namespace: "fly_to_cart",
+      key: "branding",
+      type: "json",
+      value: JSON.stringify(branding),
+    }],
+  });
+
+  const { userErrors } = result.metafieldsSet ?? {};
+  if (userErrors?.length > 0) {
+    throw new Error(userErrors.map((e: any) => e.message).join(', '));
+  }
+}
+
 export type FtcConfig = {
   id: string;
   animationKey: string;
