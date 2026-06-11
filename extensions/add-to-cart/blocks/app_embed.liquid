@@ -47,16 +47,24 @@
 
   function findCart() {
     var tries = [
-      '.header__icon--cart','[data-cart-toggle]','[data-cart-drawer-trigger]',
+      '.navlink--cart--icon','.navlink--cart','.header__icon--cart',
+      '[data-cart-toggle]','[data-cart-drawer-trigger]',
       '[data-cart-icon]','.cart-icon','.cart-link','.site-header__cart',
       '[aria-label*="cart" i]','[href="/cart"]','[data-cart-icon-bubble]',
       '.cart-count-bubble','[data-testid="cart-icon"]'
     ];
     for (var i = 0; i < tries.length; i++) {
-      var el = document.querySelector(tries[i]);
-      if (el) {
+      var els = document.querySelectorAll(tries[i]);
+      for (var j = 0; j < els.length; j++) {
+        var el = els[j];
         var r = el.getBoundingClientRect();
-        if (r.width > 0 || r.height > 0) return el;
+        var style = window.getComputedStyle(el);
+        if (
+          r.width > 0 && r.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          r.top < window.innerHeight * 0.35
+        ) return el;
       }
     }
     return null;
