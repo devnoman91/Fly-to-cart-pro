@@ -237,8 +237,8 @@ export async function createSoundPreset(admin: any, data: any) {
 }
 
 export type FtcBranding = {
-  fallbackImageUrl?: string;
-  fallbackBgColor?: string;
+  logoImageUrl?: string;
+  bubbleBgColor?: string;
   bubbleMode?: 'product' | 'logo';
 };
 

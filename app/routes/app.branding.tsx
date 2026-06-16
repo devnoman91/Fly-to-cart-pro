@@ -28,13 +28,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const formData = await request.formData();
-    const fallbackImageUrl = (formData.get("fallbackImageUrl") as string) || undefined;
-    const fallbackBgColor  = (formData.get("fallbackBgColor") as string) || "#111827";
+    const logoImageUrl = (formData.get("logoImageUrl") as string) || undefined;
+    const bubbleBgColor  = (formData.get("bubbleBgColor") as string) || "#111827";
     const bubbleMode       = (formData.get("bubbleMode") as string) === "logo" ? "logo" : "product";
 
     const branding: FtcBranding = {
-      ...(fallbackImageUrl ? { fallbackImageUrl } : {}),
-      fallbackBgColor,
+      ...(logoImageUrl ? { logoImageUrl } : {}),
+      bubbleBgColor,
       bubbleMode,
     };
 
@@ -56,31 +56,31 @@ export default function BrandingPage() {
   const isSaving    = navigation.state === "submitting";
   const isUploading = uploadFetcher.state !== "idle";
 
-  const [logoUrl,      setLogoUrl]      = useState<string>(branding.fallbackImageUrl || "");
+  const [logoUrl,      setLogoUrl]      = useState<string>(branding.logoImageUrl || "");
   const [logoFileName, setLogoFileName] = useState<string>(() => {
-    if (branding.fallbackImageUrl) {
-      const parts = branding.fallbackImageUrl.split("/");
+    if (branding.logoImageUrl) {
+      const parts = branding.logoImageUrl.split("/");
       return parts[parts.length - 1]?.split("?")[0] || "Saved logo";
     }
     return "";
   });
-  const [bgColor,      setBgColor]      = useState<string>(branding.fallbackBgColor || "#111827");
+  const [bgColor,      setBgColor]      = useState<string>(branding.bubbleBgColor || "#111827");
   const [bubbleMode,   setBubbleMode]   = useState<'product' | 'logo'>(branding.bubbleMode || "product");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state from loader whenever branding data changes (e.g. after save re-runs the loader)
   useEffect(() => {
-    setLogoUrl(branding.fallbackImageUrl || "");
-    setBgColor(branding.fallbackBgColor || "#111827");
+    setLogoUrl(branding.logoImageUrl || "");
+    setBgColor(branding.bubbleBgColor || "#111827");
     setBubbleMode(branding.bubbleMode || "product");
-    if (branding.fallbackImageUrl) {
-      const parts = branding.fallbackImageUrl.split("/");
+    if (branding.logoImageUrl) {
+      const parts = branding.logoImageUrl.split("/");
       setLogoFileName(parts[parts.length - 1]?.split("?")[0] || "Saved logo");
     } else {
       setLogoFileName("");
     }
-  }, [branding.fallbackImageUrl, branding.fallbackBgColor, branding.bubbleMode]);
+  }, [branding.logoImageUrl, branding.bubbleBgColor, branding.bubbleMode]);
 
   useEffect(() => {
     if (uploadFetcher.state === "idle" && uploadFetcher.data) {
@@ -221,6 +221,7 @@ export default function BrandingPage() {
                 </button>
               )}
 
+
               {isUploading && (
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <div style={{
@@ -325,7 +326,7 @@ export default function BrandingPage() {
           <div style={{ marginBottom: "16px" }}>
             <h2 style={sectionTitle}>Step 4: Preview and save</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              This is how the fallback bubble will look when no product image is found.
+              This is how the brand bubble will look when no product image is found.
             </p>
           </div>
 
@@ -369,7 +370,7 @@ export default function BrandingPage() {
                 </div>
               </div>
               <div style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                Fallback bubble preview
+                Brand bubble preview
               </div>
             </div>
 
@@ -426,8 +427,8 @@ export default function BrandingPage() {
               )}
 
               <Form method="POST" style={{ marginTop: "14px" }}>
-                <input type="hidden" name="fallbackImageUrl" value={logoUrl} />
-                <input type="hidden" name="fallbackBgColor"  value={bgColor} />
+                <input type="hidden" name="logoImageUrl" value={logoUrl} />
+                <input type="hidden" name="bubbleBgColor"  value={bgColor} />
                 <input type="hidden" name="bubbleMode"        value={bubbleMode} />
                 <button
                   type="submit"

@@ -4,6 +4,8 @@
 
 {% assign ftc_configs_raw = shop.metafields.fly_to_cart.configurations.value %}
 
+{% assign ftc_branding_val = shop.metafields.fly_to_cart.branding.value %}
+
 {% assign animation_key = '' %}
 {% assign sound_key = '' %}
 {% assign custom_sound_url = '' %}
@@ -20,14 +22,137 @@
   {% endfor %}
 {% endif %}
 
+{% if ftc_branding_val != blank and ftc_branding_val.logoImageUrl != blank %}
+<link rel="preload" as="image" href="{{ ftc_branding_val.logoImageUrl }}">
+{% endif %}
+
 {% if animation_key != blank or sound_key != blank %}
 <script>
 (function () {
   var FTC = {
-    animationKey:   {{ animation_key   | default: '' | json }},
-    soundKey:       {{ sound_key       | default: '' | json }},
-    customSoundUrl: {{ custom_sound_url | default: '' | json }}
+    animationKey:   {{ animation_key    | default: '' | json }},
+    soundKey:       {{ sound_key        | default: '' | json }},
+    customSoundUrl: {{ custom_sound_url | default: '' | json }},
+    branding:       {{ ftc_branding_val | json | default: 'null' }}
   };
+
+  // Preload logo so it's cached before the first animation runs
+  if (FTC.branding && FTC.branding.logoImageUrl) {
+    var _preload = new Image();
+    _preload.src = FTC.branding.logoImageUrl;
+  }
+
+  /* ─── Product image cache (variantId → url) ──────────────── */
+  var _imgCache = {};
+
+  function _cacheByHandle(handle, variantId) {
+    fetch('/products/' + handle + '.js')
+      .then(function(r) { return r.json(); })
+      .then(function(p) {
+        var src = p && p.featured_image;
+        if (!src) return;
+        // Cache for every variant of this product
+        if (p.variants) {
+          p.variants.forEach(function(v) {
+            if (!_imgCache[v.id]) { _imgCache[v.id] = src; }
+          });
+        }
+        if (variantId) _imgCache[variantId] = src;
+        new Image().src = src;
+      })
+      .catch(function() {});
+  }
+
+  // Fetch and cache product images for every add-to-cart form on the page
+  function _prefetchVariantImages() {
+    // Product page: use handle from ShopifyAnalytics — most reliable
+    try {
+      var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+      if (m && m.product && m.product.handle) {
+        _cacheByHandle(m.product.handle);
+      }
+    } catch(e) {}
+
+    // Collection / quick-add pages: fetch via variant id
+    var forms = document.querySelectorAll('form[action*="/cart/add"]');
+    for (var i = 0; i < forms.length; i++) {
+      (function(form) {
+        var inp = form.querySelector('input[name="id"]');
+        if (!inp || !inp.value || _imgCache[inp.value]) return;
+        var vid = inp.value;
+        fetch('/variants/' + vid + '.js')
+          .then(function(r) { return r.json(); })
+          .then(function(v) {
+            var src = v && v.featured_image && v.featured_image.src;
+            if (src) { _imgCache[vid] = src; new Image().src = src; return; }
+            // No variant image — fetch full product by handle
+            if (v && v.product_id) {
+              // /products/{handle}.js — get handle via product page if available
+              var handle = (window.ShopifyAnalytics &&
+                            window.ShopifyAnalytics.meta &&
+                            window.ShopifyAnalytics.meta.product &&
+                            window.ShopifyAnalytics.meta.product.handle) || null;
+              if (handle) _cacheByHandle(handle, vid);
+            }
+          })
+          .catch(function() {});
+      })(forms[i]);
+    }
+  }
+
+  // Re-cache when the selected variant changes (e.g. colour/size swatch)
+  document.addEventListener('change', function(e) {
+    var inp = e.target;
+    if (inp && inp.name === 'id') _prefetchVariantImages();
+  });
+
+  // Best-effort product image resolver called at animation time
+  function _getProductImage(btn) {
+    // 1. Pre-fetched cache (populated from /products/{handle}.js on page load)
+    var form = btn.closest('form[action*="/cart/add"]');
+    var varInp = form && form.querySelector('input[name="id"]');
+    if (varInp && _imgCache[varInp.value]) {
+      return _imgCache[varInp.value];
+    }
+
+    // 2. ShopifyAnalytics.meta — has handle but not always images;
+    //    if cache missed (fetch not done yet) do a synchronous-style lookup
+    try {
+      var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+      if (m && m.product) {
+        // Try images array (some themes populate it)
+        if (m.product.images && m.product.images.length) {
+          var src = m.product.images[0];
+          return (src.indexOf('http') === 0 ? src : 'https:' + src);
+        }
+        // Trigger a cache fill for next click (fetch is async)
+        if (m.product.handle) _cacheByHandle(m.product.handle, varInp && varInp.value);
+      }
+    } catch(e) {}
+
+    // 3. Walk UP the DOM from the button — the product image is often
+    //    a sibling section of the form, not inside it
+    var el = btn.parentElement;
+    var depth = 0;
+    while (el && el.tagName !== 'MAIN' && el !== document.body && depth < 8) {
+      var imgs = el.querySelectorAll('img[src]');
+      for (var i = 0; i < imgs.length; i++) {
+        var r = imgs[i].getBoundingClientRect();
+        if (r.width >= 80 && r.height >= 80) return imgs[i].src;
+      }
+      el = el.parentElement;
+      depth++;
+    }
+
+    return null;
+  }
+
+  // Kick off prefetch once DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _prefetchVariantImages);
+  } else {
+    _prefetchVariantImages();
+  }
 
   var audioCtx = null;
   var busy = false; // one animation at a time
@@ -115,25 +240,41 @@ function findAddToCartButton() {
 
 
 
-  /* Creates a small circular "product bubble" that flies to the cart */
+  /* Creates a small circular bubble that flies to the cart.
+     Priority: logo mode → brand logo
+               product mode → ShopifyAnalytics → variant cache → DOM img → brand logo → emoji */
   function makeBubble(btn) {
-    var container = btn.closest('[data-product], .product, .product-card, .card__inner, form[action*="/cart"]')
-                    || btn.parentElement;
-    var img = container ? container.querySelector('img[src]') : null;
+    var brand  = FTC.branding || {};
     var bubble = document.createElement('div');
-    var size = 64;
+    var size   = 64;
+    var bg     = brand.bubbleBgColor || '#111827';
+    var imgUrl = '';
 
-    if (img) {
-      bubble.style.cssText = [
-        'background-image:url(' + img.src + ')',
-        'background-size:cover',
-        'background-position:center',
-        'border-radius:50%',
-        'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
-        'border:3px solid #fff'
-      ].join(';');
+    if (brand.bubbleMode === 'logo' && brand.logoImageUrl) {
+      imgUrl = brand.logoImageUrl;
     } else {
-      bubble.style.cssText = 'background:#000;border-radius:50%;font-size:26px;display:flex;align-items:center;justify-content:center;color:#fff';
+      imgUrl = _getProductImage(btn) || brand.logoImageUrl || '';
+    }
+
+    bubble.style.cssText = [
+      'background-color:' + bg,
+      'border-radius:50%',
+      'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
+      'border:3px solid #fff',
+      'overflow:hidden'
+    ].join(';');
+
+    if (imgUrl) {
+      var imgEl = document.createElement('img');
+      imgEl.src = imgUrl;
+      imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;';
+      bubble.appendChild(imgEl);
+    } else {
+      bubble.style.fontSize = '26px';
+      bubble.style.display  = 'flex';
+      bubble.style.alignItems = 'center';
+      bubble.style.justifyContent = 'center';
+      bubble.style.color = '#fff';
       bubble.textContent = '🛍';
     }
 
