@@ -4,7 +4,7 @@ import { redirect } from "react-router";
 
 export const PLAN_PRO = "pro" as const;
 
-const IS_TEST = true;
+const IS_TEST = false;
 
 type CurrentPlan = {
   planName: string | null;
@@ -170,16 +170,25 @@ export async function cancelPlan(request: Request) {
 }
 
 export async function requireActiveSubscription(shop: string) {
-  try {
-    const subscription = await prisma.subscription.findUnique({ where: { shop } });
+  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
 
-    if (!subscription || (subscription.status !== "active" && subscription.status !== "pending")) {
-      throw redirect("/app/billing");
-    }
+  // Create a trial record on first visit; preserve existing data on subsequent calls
+  const subscription = await prisma.subscription.upsert({
+    where: { shop },
+    create: { shop, planName: "free", status: "trial", trialEndsAt: trialEnd },
+    update: {},
+  });
 
+  // Paid subscription active → allow
+  if (subscription.status === "active" || subscription.status === "pending") {
     return subscription;
-  } catch (err) {
-    if (err instanceof Response) throw err;
-    throw redirect("/app/billing");
   }
+
+  // Within 14-day trial window → allow
+  if (subscription.trialEndsAt && new Date() < new Date(subscription.trialEndsAt)) {
+    return subscription;
+  }
+
+  // Trial expired, no subscription → paywall
+  throw redirect("/app/billing");
 }

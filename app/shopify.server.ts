@@ -30,7 +30,7 @@ const shopify = shopifyApp({
           interval: BillingInterval.Every30Days,
         },
       ],
-      trialDays: 14,
+      trialDays: 0,
     },
   },
   future: {

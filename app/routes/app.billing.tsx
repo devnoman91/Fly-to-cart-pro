@@ -11,7 +11,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const subscription = await getCurrentPlan(request);
 
   // After successful subscription, send merchant into the app
@@ -20,7 +20,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect("/app");
   }
 
-  return { subscription };
+  // Pull trial end date from DB (set on first install by requireActiveSubscription)
+  const { default: prisma } = await import("../db.server");
+  const dbRecord = await prisma.subscription.findUnique({ where: { shop: session.shop } });
+  const trialEndsAt = dbRecord?.trialEndsAt ?? null;
+  const trialExpired = trialEndsAt ? new Date() >= new Date(trialEndsAt) : false;
+
+  return { subscription, trialEndsAt, trialExpired };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -53,25 +59,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BillingPage() {
-  const { subscription } = useLoaderData<typeof loader>();
+  const { subscription, trialEndsAt, trialExpired } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const [expandedFaq, setExpandedFaq] = React.useState<number | null>(null);
 
   const isActive = subscription?.status === "active" || subscription?.status === "pending";
   const billingUnavailable = subscription?.billingUnavailable === true;
 
-  const getTrialDaysRemaining = () => {
-    if (!subscription?.trialEndsAt) return null;
-    const days = Math.ceil(
-      (new Date(subscription.trialEndsAt).getTime() - Date.now()) / 86400000
-    );
-    return Math.max(0, days);
-  };
-
   const formatDate = (d: Date | string | null | undefined) =>
     d ? new Date(d).toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" }) : null;
 
-  const trialDaysLeft = getTrialDaysRemaining();
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
+    : null;
   const trialProgress = trialDaysLeft === null ? 100 : Math.min(((14 - trialDaysLeft) / 14) * 100, 100);
 
   const features = [
@@ -85,8 +85,8 @@ export default function BillingPage() {
 
   const faqs = [
     {
-      q: "Will I be charged during the 14-day trial?",
-      a: "No. You get full access for 14 days completely free. If you cancel before the trial ends, you will not be charged.",
+      q: "How does the 14-day free trial work?",
+      a: "You get full access for 14 days from the moment you install the app — no card required, nothing to click. After 14 days, subscribe for $3/month to keep access.",
     },
     {
       q: "Are there any feature restrictions?",
@@ -152,35 +152,35 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Trial banner */}
-        {isActive && (
+        {/* Trial banner — shown while in trial or active subscription */}
+        {(isActive || (trialDaysLeft !== null && trialDaysLeft > 0)) && (
           <div style={{ ...cardStyle, marginBottom: "16px", background: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              {trialDaysLeft !== null && trialDaysLeft > 0 ? (
-                <div>
-                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>
-                    Trial active — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
-                  </h3>
-                  <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
-                    Trial ends: {formatDate(subscription?.trialEndsAt)}
-                  </p>
-                </div>
-              ) : (
+              {isActive ? (
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>Subscription active</h3>
                   <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
                     {subscription?.billingOn
                       ? `Next billing: ${formatDate(subscription.billingOn)}`
-                      : "Pro plan approved and active through Shopify."}
+                      : "Pro plan active through Shopify."}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>
+                    Free trial — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
+                    Trial ends: {formatDate(trialEndsAt)}
                   </p>
                 </div>
               )}
               <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "12px", fontWeight: 600 }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#28a745", display: "inline-block" }} />
-                Active
+                {isActive ? "Active" : "Trial"}
               </div>
             </div>
-            {trialDaysLeft !== null && trialDaysLeft > 0 && (
+            {!isActive && trialDaysLeft !== null && trialDaysLeft > 0 && (
               <div style={{ background: "#e0e0e0", borderRadius: "4px", height: "6px", overflow: "hidden" }}>
                 <div style={{ background: "#111827", height: "100%", width: `${trialProgress}%`, transition: "width 0.3s" }} />
               </div>
@@ -239,10 +239,10 @@ export default function BillingPage() {
                 disabled={billingUnavailable}
                 style={{ ...btnStyle, opacity: billingUnavailable ? 0.4 : 1, cursor: billingUnavailable ? "not-allowed" : "pointer" }}
               >
-                Start 14-Day Free Trial
+                {trialExpired ? "Subscribe — $3 / month" : "Start Using Free Trial"}
               </button>
               <p style={{ textAlign: "center", fontSize: "12px", color: "#888", margin: "10px 0 0 0" }}>
-                {billingUnavailable ? "Set app to public distribution first" : "No credit card charged during trial"}
+                {billingUnavailable ? "Set app to public distribution first" : trialExpired ? "Your 14-day trial has ended" : "14 days free, then $3/month"}
               </p>
             </Form>
           )}
