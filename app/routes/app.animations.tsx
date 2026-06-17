@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { requireActiveSubscription } from "../services/billing.server";
 import {
   fetchConfigurations,
   saveConfigurations,
@@ -41,7 +42,8 @@ const SOUNDS: Record<string, { name: string; icon: string }> = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActiveSubscription(session.shop);
   const configs = await fetchConfigurations(admin);
   return { configs };
 };

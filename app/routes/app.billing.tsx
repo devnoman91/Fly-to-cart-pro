@@ -1,6 +1,6 @@
 import React from "react";
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Form, useLoaderData, useActionData, useRouteError } from "react-router";
+import { Form, useLoaderData, useActionData, useRouteError, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getCurrentPlan, requestPlan, cancelPlan } from "../services/billing.server";
@@ -13,6 +13,13 @@ function getErrorMessage(error: unknown, fallback: string) {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const subscription = await getCurrentPlan(request);
+
+  // After successful subscription, send merchant into the app
+  const url = new URL(request.url);
+  if (url.searchParams.get("subscribed") === "1" && (subscription.status === "active" || subscription.status === "pending")) {
+    throw redirect("/app");
+  }
+
   return { subscription };
 };
 

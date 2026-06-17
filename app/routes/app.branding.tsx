@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActiveSubscription } from "../services/billing.server";
 import { fetchBranding, saveBranding, type FtcBranding } from "../utils/shopify-graphql";
 import {
   card,
@@ -16,7 +17,8 @@ import {
 } from "../styles/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActiveSubscription(session.shop);
   const branding = await fetchBranding(admin);
   return { branding };
 };

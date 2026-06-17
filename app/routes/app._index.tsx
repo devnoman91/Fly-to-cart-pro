@@ -2,6 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { requireActiveSubscription } from "../services/billing.server";
 import { fetchConfigurations } from "../utils/shopify-graphql";
 import {
   badge,
@@ -16,6 +17,7 @@ import {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+  await requireActiveSubscription(session.shop);
   const configs = await fetchConfigurations(admin);
   const liveConfig = configs.find((config) => config.live) ?? null;
   return { liveConfig, totalCount: configs.length, shop: session?.shop };
