@@ -155,7 +155,6 @@ export default function BrandingPage() {
               const desc   = mode === "product"
                 ? "Use the product's own image from the page. Falls back to your logo if none is found."
                 : "Always use your uploaded brand logo as the bubble, regardless of product image.";
-              const emoji  = mode === "product" ? "🖼️" : "🏷️";
               return (
                 <button
                   key={mode}
@@ -173,16 +172,15 @@ export default function BrandingPage() {
                     userSelect: "none",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
-                    <div style={{ fontSize: "28px", lineHeight: 1 }}>{emoji}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontWeight: 700, fontSize: "14px", color: "#111827" }}>{label}</div>
                     {active && (
                       <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
                         Selected
                       </span>
                     )}
                   </div>
-                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{label}</div>
-                  <div style={{ ...mutedText, marginTop: "5px", fontSize: "12px" }}>{desc}</div>
+                  <div style={{ ...mutedText, marginTop: "6px", fontSize: "12px" }}>{desc}</div>
                 </button>
               );
             })}
@@ -194,14 +192,14 @@ export default function BrandingPage() {
           <div style={{ marginBottom: "16px" }}>
             <h2 style={sectionTitle}>Step 2: Brand logo (optional)</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              Upload a logo or icon — PNG, JPG, WebP, SVG or GIF, max 2 MB. It will fill the bubble circle.
+              Upload a logo or icon — PNG, JPG, WebP or GIF, max 2 MB. It will fill the bubble circle.
             </p>
           </div>
 
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+            accept="image/png,image/jpeg,image/gif,image/webp"
             onChange={handleFileChange}
             style={{ display: "none" }}
           />
