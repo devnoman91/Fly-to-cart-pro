@@ -63,64 +63,46 @@ export async function getCurrentPlan(request: Request) {
 
   if (!session?.shop) throw new Error("No shop session found");
 
-  const cachedPlan = await prisma.subscription.findUnique({ where: { shop: session.shop } });
+  const dbRecord = await prisma.subscription.findUnique({ where: { shop: session.shop } });
 
-  let activePlan: CurrentPlan = {
-    planName: null,
-    status: null,
-    trialEndsAt: null,
-    billingOn: null,
-    billingUnavailable: false,
-  };
-
+  // Check Shopify for a real active subscription
   try {
     const response = await billingApi.check({ plan: PLAN_PRO, isTest: IS_TEST });
     const subscription = response?.appSubscriptions?.[0];
 
     if (subscription?.status === "ACTIVE" || subscription?.status === "PENDING") {
-      let trialEndsAt: Date | null = null;
-      if (subscription.createdAt && subscription.trialDays) {
-        const created = new Date(subscription.createdAt);
-        trialEndsAt = new Date(created.getTime() + subscription.trialDays * 24 * 60 * 60 * 1000);
-      }
-
-      activePlan = {
+      const activePlan: CurrentPlan = {
         planName: PLAN_PRO,
         status: subscription.status.toLowerCase(),
-        trialEndsAt,
+        trialEndsAt: dbRecord?.trialEndsAt ?? null, // preserve our trial date
         billingOn: subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null,
         billingUnavailable: false,
       };
+      // Only persist when we have real Shopify data so we never wipe trial dates
+      await persistPlan(session.shop, activePlan);
+      return activePlan;
     }
   } catch (err: unknown) {
     const msg = getErrorMessage(err);
     if (msg.includes("public distribution")) {
-      // App not yet set to public in Partner Dashboard — billing unavailable
-      activePlan.billingUnavailable = true;
+      return {
+        planName: dbRecord?.planName ?? null,
+        status: dbRecord?.status ?? null,
+        trialEndsAt: dbRecord?.trialEndsAt ?? null,
+        billingOn: dbRecord?.billingOn ?? null,
+        billingUnavailable: true,
+      };
     }
-    // All other errors (plan not yet subscribed) — activePlan stays null
   }
 
-  if (
-    !activePlan.status &&
-    !activePlan.billingUnavailable &&
-    cachedPlan?.status &&
-    ["active", "pending"].includes(cachedPlan.status) &&
-    !cachedPlan.billingOn
-  ) {
-    activePlan = {
-      planName: cachedPlan.planName,
-      status: cachedPlan.status,
-      trialEndsAt: cachedPlan.trialEndsAt,
-      billingOn: cachedPlan.billingOn,
-      billingUnavailable: false,
-    };
-  }
-
-  // Sync to DB so other routes can read it fast.
-  await persistPlan(session.shop, activePlan);
-
-  return activePlan;
+  // No active Shopify subscription — return DB record as-is (preserves trial status/dates)
+  return {
+    planName: dbRecord?.planName ?? null,
+    status: dbRecord?.status ?? null,
+    trialEndsAt: dbRecord?.trialEndsAt ?? null,
+    billingOn: dbRecord?.billingOn ?? null,
+    billingUnavailable: false,
+  };
 }
 
 export async function requestPlan(request: Request) {

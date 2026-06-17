@@ -11,19 +11,15 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  await authenticate.admin(request);
   const subscription = await getCurrentPlan(request);
 
-  // After successful subscription, send merchant into the app
   const url = new URL(request.url);
   if (url.searchParams.get("subscribed") === "1" && (subscription.status === "active" || subscription.status === "pending")) {
     throw redirect("/app");
   }
 
-  // Pull trial end date from DB (set on first install by requireActiveSubscription)
-  const { default: prisma } = await import("../db.server");
-  const dbRecord = await prisma.subscription.findUnique({ where: { shop: session.shop } });
-  const trialEndsAt = dbRecord?.trialEndsAt ?? null;
+  const trialEndsAt = subscription.trialEndsAt ?? null;
   const trialExpired = trialEndsAt ? new Date() >= new Date(trialEndsAt) : false;
 
   return { subscription, trialEndsAt, trialExpired };
