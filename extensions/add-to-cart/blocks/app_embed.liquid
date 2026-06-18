@@ -106,7 +106,7 @@
     var forms = document.querySelectorAll('form[action*="/cart/add"]');
     for (var i = 0; i < forms.length; i++) {
       (function(form) {
-        var inp = form.querySelector('input[name="id"]');
+        var inp = form.querySelector('[name="id"]');
         if (!inp || !inp.value || _imgCache[inp.value]) return;
         var vid = inp.value;
         fetch('/variants/' + vid + '.js')
@@ -137,44 +137,56 @@
 
   // Best-effort product image resolver called at animation time
   function _getProductImage(btn) {
-    // 1. Pre-fetched cache (populated from /products/{handle}.js on page load)
+    // 1. Pre-fetched cache — keyed by variant id.
+    //    Use [name="id"] (not just input) to cover themes that use <select name="id">
     var form = btn.closest('form[action*="/cart/add"]');
-    var varInp = form && form.querySelector('input[name="id"]');
+    var varInp = form && form.querySelector('[name="id"]');
     if (varInp && _imgCache[varInp.value]) {
       return _imgCache[varInp.value];
     }
 
-    // 2. ShopifyAnalytics.meta — has handle but not always images;
-    //    if cache missed (fetch not done yet) do a synchronous-style lookup
+    // 2. ShopifyAnalytics.meta — available on PDP only
     try {
       var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
       if (m && m.product) {
-        // Try images array (some themes populate it)
         if (m.product.images && m.product.images.length) {
           var src = m.product.images[0];
           return (src.indexOf('http') === 0 ? src : 'https:' + src);
         }
-        // Trigger a cache fill for next click (fetch is async)
         if (m.product.handle) _cacheByHandle(m.product.handle, varInp && varInp.value);
       }
     } catch(e) {}
 
-    // 3. Walk UP the DOM from the button — the product image is often
-    //    a sibling section of the form, not inside it.
-    //    Checks src, data-src, data-lazy-src, data-original, and srcset
-    //    so lazy-loading themes (Dawn, Impulse, etc.) are covered.
+    // 3. Walk UP the DOM from the button looking for a visible product image.
+    //    Includes lazy-loading attributes and now also searches inside <main>
+    //    as a final step (PDP image gallery is a sibling section of the form).
+    function _scanImgs(root) {
+      var imgs = root.querySelectorAll('img');
+      for (var i = 0; i < imgs.length; i++) {
+        var s = _imgSrc(imgs[i]);
+        if (!s) continue;
+        var r = imgs[i].getBoundingClientRect();
+        if (r.width >= 80 && r.height >= 80) return s;
+      }
+      return null;
+    }
+
     var el = btn.parentElement;
     var depth = 0;
-    while (el && el.tagName !== 'MAIN' && el !== document.body && depth < 8) {
-      var imgs = el.querySelectorAll('img');
-      for (var i = 0; i < imgs.length; i++) {
-        var src = _imgSrc(imgs[i]);
-        if (!src) continue;
-        var r = imgs[i].getBoundingClientRect();
-        if (r.width >= 80 && r.height >= 80) return src;
-      }
+    while (el && el !== document.body && depth < 10) {
+      var found = _scanImgs(el);
+      if (found) return found;
+      if (el.tagName === 'MAIN') break; // searched all of <main>, stop
       el = el.parentElement;
       depth++;
+    }
+
+    // 4. Last resort: search the whole <main> for a large visible image
+    //    (catches layouts where image and form are in completely separate sections)
+    var main = document.querySelector('main, [role="main"], #main, #MainContent');
+    if (main) {
+      var found = _scanImgs(main);
+      if (found) return found;
     }
 
     return null;
@@ -754,7 +766,7 @@ function doSpiral(btn) {
   // Fixes collection / quick-buy pages where prefetch may not have run yet.
   function _ensureImageThenAnimate(btn) {
     var form   = btn.closest('form[action*="/cart/add"]');
-    var varInp = form && form.querySelector('input[name="id"]');
+    var varInp = form && form.querySelector('[name="id"]');
     var vid    = varInp && varInp.value;
 
     if (vid && _imgCache[vid]) { playAnimation(btn); return; }
