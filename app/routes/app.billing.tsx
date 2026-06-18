@@ -66,7 +66,7 @@ export default function BillingPage() {
     d ? new Date(d).toLocaleDateString("en-GB", { year: "numeric", month: "long", day: "numeric" }) : null;
 
   const trialDaysLeft = trialEndsAt
-    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
+    ? Math.max(0, Math.floor((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
     : null;
   const trialProgress = trialDaysLeft === null ? 100 : Math.min(((14 - trialDaysLeft) / 14) * 100, 100);
 
@@ -232,13 +232,17 @@ export default function BillingPage() {
               <input type="hidden" name="intent" value="subscribe" />
               <button
                 type="submit"
-                disabled={billingUnavailable}
-                style={{ ...btnStyle, opacity: billingUnavailable ? 0.4 : 1, cursor: billingUnavailable ? "not-allowed" : "pointer" }}
+                disabled={billingUnavailable || !trialExpired}
+                style={{ ...btnStyle, opacity: (billingUnavailable || !trialExpired) ? 0.4 : 1, cursor: (billingUnavailable || !trialExpired) ? "not-allowed" : "pointer" }}
               >
-                {trialExpired ? "Subscribe — $3 / month" : "Start Using Free Trial"}
+                Subscribe — $3 / month
               </button>
               <p style={{ textAlign: "center", fontSize: "12px", color: "#888", margin: "10px 0 0 0" }}>
-                {billingUnavailable ? "Set app to public distribution first" : trialExpired ? "Your 14-day trial has ended" : "14 days free, then $3/month"}
+                {billingUnavailable
+                  ? "Set app to public distribution first"
+                  : trialExpired
+                  ? "Your 14-day trial has ended"
+                  : `Available after your trial ends — ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining`}
               </p>
             </Form>
           )}
