@@ -106,15 +106,48 @@ export default function BrandingPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setLogoFileName(file.name);
-    setLogoUrl("");
-    const fd = new FormData();
-    fd.append("file", file);
-    uploadFetcher.submit(fd, {
-      method: "post",
-      action: "/api/image-upload",
-      encType: "multipart/form-data",
-    });
+
+    const reset = () => { if (fileInputRef.current) fileInputRef.current.value = ""; };
+
+    if (file.size > 2 * 1024 * 1024) {
+      shopify.toast.show("Logo must be under 2 MB — please choose a smaller file.", { isError: true, duration: 5000 });
+      reset();
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const { naturalWidth: w, naturalHeight: h } = img;
+
+      if (w < 50 || h < 50) {
+        shopify.toast.show(`Image is too small (${w}×${h}px). Minimum size is 50×50 px.`, { isError: true, duration: 5000 });
+        reset();
+        return;
+      }
+      if (w > 4000 || h > 4000) {
+        shopify.toast.show(`Image is too large (${w}×${h}px). Maximum size is 4000×4000 px.`, { isError: true, duration: 5000 });
+        reset();
+        return;
+      }
+
+      setLogoFileName(file.name);
+      setLogoUrl("");
+      const fd = new FormData();
+      fd.append("file", file);
+      uploadFetcher.submit(fd, {
+        method: "post",
+        action: "/api/image-upload",
+        encType: "multipart/form-data",
+      });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      shopify.toast.show("Could not read image — please try a different file.", { isError: true, duration: 5000 });
+      reset();
+    };
+    img.src = objectUrl;
   };
 
   const bubblePreviewStyle: React.CSSProperties = {
@@ -194,7 +227,7 @@ export default function BrandingPage() {
           <div style={{ marginBottom: "16px" }}>
             <h2 style={sectionTitle}>Step 2: Brand logo (optional)</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              Upload a logo or icon — PNG, JPG, WebP or GIF, max 2 MB. It will fill the bubble circle.
+              Upload a logo or icon — PNG, JPG, WebP or GIF. Max 2 MB, between 50×50 and 4000×4000 px. It will fill the bubble circle.
             </p>
           </div>
 

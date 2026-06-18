@@ -45,6 +45,35 @@
   /* ─── Product image cache (variantId → url) ──────────────── */
   var _imgCache = {};
 
+  // Read the real image URL regardless of which lazy-loading attribute the theme uses
+  function _imgSrc(img) {
+    return img.src ||
+      img.getAttribute('data-src') ||
+      img.getAttribute('data-lazy-src') ||
+      img.getAttribute('data-original') ||
+      (img.getAttribute('srcset') || '').split(',')[0].trim().split(' ')[0] ||
+      '';
+  }
+
+  // Walk up from the button to find the nearest product card link and return its handle
+  function _getHandleFromCard(btn) {
+    var el = btn, depth = 0;
+    while (el && el !== document.body && depth < 12) {
+      var links = el.querySelectorAll('a[href*="/products/"]');
+      for (var i = 0; i < links.length; i++) {
+        var m = links[i].href.match(/\/products\/([^/?#]+)/);
+        if (m && m[1]) return m[1];
+      }
+      if (el.tagName === 'A' && el.href) {
+        var m2 = el.href.match(/\/products\/([^/?#]+)/);
+        if (m2 && m2[1]) return m2[1];
+      }
+      el = el.parentElement;
+      depth++;
+    }
+    return null;
+  }
+
   function _cacheByHandle(handle, variantId) {
     fetch('/products/' + handle + '.js')
       .then(function(r) { return r.json(); })
@@ -131,14 +160,18 @@
     } catch(e) {}
 
     // 3. Walk UP the DOM from the button — the product image is often
-    //    a sibling section of the form, not inside it
+    //    a sibling section of the form, not inside it.
+    //    Checks src, data-src, data-lazy-src, data-original, and srcset
+    //    so lazy-loading themes (Dawn, Impulse, etc.) are covered.
     var el = btn.parentElement;
     var depth = 0;
     while (el && el.tagName !== 'MAIN' && el !== document.body && depth < 8) {
-      var imgs = el.querySelectorAll('img[src]');
+      var imgs = el.querySelectorAll('img');
       for (var i = 0; i < imgs.length; i++) {
+        var src = _imgSrc(imgs[i]);
+        if (!src) continue;
         var r = imgs[i].getBoundingClientRect();
-        if (r.width >= 80 && r.height >= 80) return imgs[i].src;
+        if (r.width >= 80 && r.height >= 80) return src;
       }
       el = el.parentElement;
       depth++;
@@ -716,6 +749,47 @@ function doSpiral(btn) {
     } catch(e) {}
   }
 
+  // If the cache is empty at click time, try to fetch the product by handle
+  // (from a card link or ShopifyAnalytics) and wait up to 300 ms before animating.
+  // Fixes collection / quick-buy pages where prefetch may not have run yet.
+  function _ensureImageThenAnimate(btn) {
+    var form   = btn.closest('form[action*="/cart/add"]');
+    var varInp = form && form.querySelector('input[name="id"]');
+    var vid    = varInp && varInp.value;
+
+    if (vid && _imgCache[vid]) { playAnimation(btn); return; }
+
+    var handle = _getHandleFromCard(btn);
+    if (!handle) {
+      try {
+        var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+        if (m && m.product && m.product.handle) handle = m.product.handle;
+      } catch(e) {}
+    }
+
+    if (!handle) { playAnimation(btn); return; }
+
+    var done  = false;
+    var guard = setTimeout(function() {
+      if (!done) { done = true; playAnimation(btn); }
+    }, 300);
+
+    fetch('/products/' + handle + '.js')
+      .then(function(r) { return r.json(); })
+      .then(function(p) {
+        if (done) return;
+        clearTimeout(guard);
+        done = true;
+        var src = p && p.featured_image;
+        if (src) {
+          if (vid) _imgCache[vid] = src;
+          if (p.variants) p.variants.forEach(function(v) { if (!_imgCache[v.id]) _imgCache[v.id] = src; });
+        }
+        playAnimation(btn);
+      })
+      .catch(function() { if (!done) { done = true; playAnimation(btn); } });
+  }
+
   /* ─── Click listener ──────────────────────────────────── */
 
   document.addEventListener('click', function(e) {
@@ -729,10 +803,10 @@ function doSpiral(btn) {
     if (!isCartBtn) return;
 
     busy = true;
-    setTimeout(function() { busy = false; }, 1400);
+    setTimeout(function() { busy = false; }, 1800);
 
-    if (FTC.animationKey) playAnimation(btn);
     if (FTC.soundKey)     playSound(FTC.soundKey);
+    if (FTC.animationKey) _ensureImageThenAnimate(btn);
   });
 })();
 </script>
