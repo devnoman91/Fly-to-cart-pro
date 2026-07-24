@@ -121,7 +121,7 @@ export async function cancelPlan(request: Request) {
 // Called in every protected route loader.
 // Allows access during 14-day trial; redirects to billing after trial expires.
 
-export async function requireActiveSubscription(shop: string) {
+export async function requireActiveSubscription(shop: string, request?: Request) {
   const dbRecord = await getOrCreateTrialRecord(shop);
 
   // Paid and active → allow
@@ -134,6 +134,10 @@ export async function requireActiveSubscription(shop: string) {
     return dbRecord;
   }
 
-  // Trial expired, not subscribed → paywall
-  throw redirect("/app/billing");
+  // Trial expired, not subscribed → paywall.
+  // Preserve the original request's query string (host, embedded, shop, etc.) —
+  // a bare "/app/billing" redirect drops the embedded auth context and the
+  // follow-up request fails authentication, landing on /auth/login instead.
+  const search = request ? new URL(request.url).search : "";
+  throw redirect(`/app/billing${search}`);
 }

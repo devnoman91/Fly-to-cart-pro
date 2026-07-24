@@ -23,805 +23,820 @@
 {% endif %}
 
 {% if ftc_branding_val != blank and ftc_branding_val.logoImageUrl != blank %}
-<link rel="preload" as="image" href="{{ ftc_branding_val.logoImageUrl }}">
+  <link rel="preload" as="image" href="{{ ftc_branding_val.logoImageUrl }}">
 {% endif %}
 
 {% if animation_key != blank or sound_key != blank %}
-<script>
-(function () {
-  var FTC = {
-    animationKey:   {{ animation_key    | default: '' | json }},
-    soundKey:       {{ sound_key        | default: '' | json }},
-    customSoundUrl: {{ custom_sound_url | default: '' | json }},
-    branding:       {{ ftc_branding_val | json | default: 'null' }}
-  };
+  <script>
+    (function () {
+      var FTC = {
+        animationKey:   {{ animation_key    | default: '' | json }},
+        soundKey:       {{ sound_key        | default: '' | json }},
+        customSoundUrl: {{ custom_sound_url | default: '' | json }},
+        branding:       {{ ftc_branding_val | json | default: 'null' }}
+      };
 
-  // Preload logo so it's cached before the first animation runs
-  if (FTC.branding && FTC.branding.logoImageUrl) {
-    var _preload = new Image();
-    _preload.src = FTC.branding.logoImageUrl;
-  }
-
-  /* ─── Product image cache (variantId → url) ──────────────── */
-  var _imgCache = {};
-
-  // Read the real image URL regardless of which lazy-loading attribute the theme uses
-  function _imgSrc(img) {
-    return img.src ||
-      img.getAttribute('data-src') ||
-      img.getAttribute('data-lazy-src') ||
-      img.getAttribute('data-original') ||
-      (img.getAttribute('srcset') || '').split(',')[0].trim().split(' ')[0] ||
-      '';
-  }
-
-  // Walk up from the button to find the nearest product card link and return its handle
-  function _getHandleFromCard(btn) {
-    var el = btn, depth = 0;
-    while (el && el !== document.body && depth < 12) {
-      var links = el.querySelectorAll('a[href*="/products/"]');
-      for (var i = 0; i < links.length; i++) {
-        var m = links[i].href.match(/\/products\/([^/?#]+)/);
-        if (m && m[1]) return m[1];
+      // Preload logo so it's cached before the first animation runs
+      if (FTC.branding && FTC.branding.logoImageUrl) {
+        var _preload = new Image();
+        _preload.src = FTC.branding.logoImageUrl;
       }
-      if (el.tagName === 'A' && el.href) {
-        var m2 = el.href.match(/\/products\/([^/?#]+)/);
-        if (m2 && m2[1]) return m2[1];
-      }
-      el = el.parentElement;
-      depth++;
-    }
-    return null;
-  }
 
-  function _cacheByHandle(handle, variantId) {
-    fetch('/products/' + handle + '.js')
-      .then(function(r) { return r.json(); })
-      .then(function(p) {
-        var src = p && p.featured_image;
-        if (!src) return;
-        // Cache for every variant of this product
-        if (p.variants) {
-          p.variants.forEach(function(v) {
-            if (!_imgCache[v.id]) { _imgCache[v.id] = src; }
-          });
+      /* ─── Product image cache (variantId → url) ──────────────── */
+      var _imgCache = {};
+
+      // Read the real image URL regardless of which lazy-loading attribute the theme uses
+      function _imgSrc(img) {
+        if (!img || typeof img.getAttribute !== 'function') return '';
+
+        // Full, already-resolved URL from the live src property
+        if (img.src) return img.src;
+
+        // Common lazy-loading attribute names used by Shopify themes
+        var lazyAttrs = ['data-src', 'data-lazy-src', 'data-original'];
+        for (var i = 0; i < lazyAttrs.length; i++) {
+          var val = img.getAttribute(lazyAttrs[i]);
+          if (val) return val;
         }
-        if (variantId) _imgCache[variantId] = src;
-        new Image().src = src;
-      })
-      .catch(function() {});
-  }
 
-  // Fetch and cache product images for every add-to-cart form on the page
-  function _prefetchVariantImages() {
-    // Product page: use handle from ShopifyAnalytics — most reliable
-    try {
-      var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
-      if (m && m.product && m.product.handle) {
-        _cacheByHandle(m.product.handle);
+        // Fall back to the first URL in a responsive srcset (handles "url 2x" descriptors)
+        var srcset = img.getAttribute('srcset');
+        if (srcset) {
+          var first = srcset.split(',')[0];
+          var url = first && first.trim().split(/\s+/)[0];
+          if (url) return url;
+        }
+
+        return '';
       }
-    } catch(e) {}
 
-    // Collection / quick-add pages: fetch via variant id
-    var forms = document.querySelectorAll('form[action*="/cart/add"]');
-    for (var i = 0; i < forms.length; i++) {
-      (function(form) {
-        var inp = form.querySelector('[name="id"]');
-        if (!inp || !inp.value || _imgCache[inp.value]) return;
-        var vid = inp.value;
-        fetch('/variants/' + vid + '.js')
+      // Walk up from the button to find the nearest product card link and return its handle
+      function _getHandleFromCard(btn) {
+        var el = btn, depth = 0;
+        while (el && el !== document.body && depth < 12) {
+          var links = el.querySelectorAll('a[href*="/products/"]');
+          for (var i = 0; i < links.length; i++) {
+            var m = links[i].href.match(/\/products\/([^/?#]+)/);
+            if (m && m[1]) return m[1];
+          }
+          if (el.tagName === 'A' && el.href) {
+            var m2 = el.href.match(/\/products\/([^/?#]+)/);
+            if (m2 && m2[1]) return m2[1];
+          }
+          el = el.parentElement;
+          depth++;
+        }
+        return null;
+      }
+
+      function _cacheByHandle(handle, variantId) {
+        fetch('/products/' + handle + '.js')
           .then(function(r) { return r.json(); })
-          .then(function(v) {
-            var src = v && v.featured_image && v.featured_image.src;
-            if (src) { _imgCache[vid] = src; new Image().src = src; return; }
-            // No variant image — fetch full product by handle
-            if (v && v.product_id) {
-              // /products/{handle}.js — get handle via product page if available
-              var handle = (window.ShopifyAnalytics &&
-                            window.ShopifyAnalytics.meta &&
-                            window.ShopifyAnalytics.meta.product &&
-                            window.ShopifyAnalytics.meta.product.handle) || null;
-              if (handle) _cacheByHandle(handle, vid);
+          .then(function(p) {
+            var src = p && p.featured_image;
+            if (!src) return;
+            // Cache for every variant of this product
+            if (p.variants) {
+              p.variants.forEach(function(v) {
+                if (!_imgCache[v.id]) { _imgCache[v.id] = src; }
+              });
             }
+            if (variantId) _imgCache[variantId] = src;
+            new Image().src = src;
           })
           .catch(function() {});
-      })(forms[i]);
-    }
-  }
+      }
 
-  // Re-cache when the selected variant changes (e.g. colour/size swatch)
-  document.addEventListener('change', function(e) {
-    var inp = e.target;
-    if (inp && inp.name === 'id') _prefetchVariantImages();
-  });
+      // Fetch and cache product images for every add-to-cart form on the page
+      function _prefetchVariantImages() {
+        // Product page: use handle from ShopifyAnalytics — most reliable
+        try {
+          var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+          if (m && m.product && m.product.handle) {
+            _cacheByHandle(m.product.handle);
+          }
+        } catch(e) {}
 
-  // Best-effort product image resolver called at animation time
-  function _getProductImage(btn) {
-    // 1. Pre-fetched cache — keyed by variant id.
-    //    Use [name="id"] (not just input) to cover themes that use <select name="id">
-    var form = btn.closest('form[action*="/cart/add"]');
-    var varInp = form && form.querySelector('[name="id"]');
-    if (varInp && _imgCache[varInp.value]) {
-      return _imgCache[varInp.value];
-    }
-
-    // 2. ShopifyAnalytics.meta — available on PDP only
-    try {
-      var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
-      if (m && m.product) {
-        if (m.product.images && m.product.images.length) {
-          var src = m.product.images[0];
-          return (src.indexOf('http') === 0 ? src : 'https:' + src);
+        // Collection / quick-add pages: fetch via variant id
+        var forms = document.querySelectorAll('form[action*="/cart/add"]');
+        for (var i = 0; i < forms.length; i++) {
+          (function(form) {
+            var inp = form.querySelector('[name="id"]');
+            if (!inp || !inp.value || _imgCache[inp.value]) return;
+            var vid = inp.value;
+            fetch('/variants/' + vid + '.js')
+              .then(function(r) { return r.json(); })
+              .then(function(v) {
+                var src = v && v.featured_image && v.featured_image.src;
+                if (src) { _imgCache[vid] = src; new Image().src = src; return; }
+                // No variant image — fetch full product by handle
+                if (v && v.product_id) {
+                  // /products/{handle}.js — get handle via product page if available
+                  var handle = (window.ShopifyAnalytics &&
+                                window.ShopifyAnalytics.meta &&
+                                window.ShopifyAnalytics.meta.product &&
+                                window.ShopifyAnalytics.meta.product.handle) || null;
+                  if (handle) _cacheByHandle(handle, vid);
+                }
+              })
+              .catch(function() {});
+          })(forms[i]);
         }
-        if (m.product.handle) _cacheByHandle(m.product.handle, varInp && varInp.value);
       }
-    } catch(e) {}
 
-    // 3. Walk UP the DOM from the button looking for a visible product image.
-    //    Includes lazy-loading attributes and now also searches inside <main>
-    //    as a final step (PDP image gallery is a sibling section of the form).
-    function _scanImgs(root) {
-      var imgs = root.querySelectorAll('img');
-      for (var i = 0; i < imgs.length; i++) {
-        var s = _imgSrc(imgs[i]);
-        if (!s) continue;
-        var r = imgs[i].getBoundingClientRect();
-        if (r.width >= 80 && r.height >= 80) return s;
+      // Re-cache when the selected variant changes (e.g. colour/size swatch)
+      document.addEventListener('change', function(e) {
+        var inp = e.target;
+        if (inp && inp.name === 'id') _prefetchVariantImages();
+      });
+
+      // Best-effort product image resolver called at animation time
+      function _getProductImage(btn) {
+        // 1. Pre-fetched cache — keyed by variant id.
+        //    Use [name="id"] (not just input) to cover themes that use <select name="id">
+        var form = btn.closest('form[action*="/cart/add"]');
+        var varInp = form && form.querySelector('[name="id"]');
+        if (varInp && _imgCache[varInp.value]) {
+          return _imgCache[varInp.value];
+        }
+
+        // 2. ShopifyAnalytics.meta — available on PDP only
+        try {
+          var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+          if (m && m.product) {
+            if (m.product.images && m.product.images.length) {
+              var src = m.product.images[0];
+              return (src.indexOf('http') === 0 ? src : 'https:' + src);
+            }
+            if (m.product.handle) _cacheByHandle(m.product.handle, varInp && varInp.value);
+          }
+        } catch(e) {}
+
+        // 3. Walk UP the DOM from the button looking for a visible product image.
+        //    Includes lazy-loading attributes and now also searches inside <main>
+        //    as a final step (PDP image gallery is a sibling section of the form).
+        function _scanImgs(root) {
+          var imgs = root.querySelectorAll('img');
+          for (var i = 0; i < imgs.length; i++) {
+            var s = _imgSrc(imgs[i]);
+            if (!s) continue;
+            var r = imgs[i].getBoundingClientRect();
+            if (r.width >= 80 && r.height >= 80) return s;
+          }
+          return null;
+        }
+
+        var el = btn.parentElement;
+        var depth = 0;
+        while (el && el !== document.body && depth < 10) {
+          var found = _scanImgs(el);
+          if (found) return found;
+          if (el.tagName === 'MAIN') break; // searched all of <main>, stop
+          el = el.parentElement;
+          depth++;
+        }
+
+        // 4. Last resort: search the whole <main> for a large visible image
+        //    (catches layouts where image and form are in completely separate sections)
+        var main = document.querySelector('main, [role="main"], #main, #MainContent');
+        if (main) {
+          var found = _scanImgs(main);
+          if (found) return found;
+        }
+
+        return null;
       }
+
+      // Kick off prefetch once DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _prefetchVariantImages);
+      } else {
+        _prefetchVariantImages();
+      }
+
+      var audioCtx = null;
+      var busy = false; // one animation at a time
+
+      /* ─── Helpers ─────────────────────────────────────────── */
+
+      function ctx() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+      }
+
+      function center(el) {
+        var r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+
+      function findCart() {
+        var tries = [
+          '.navlink--cart--icon','.navlink--cart','.header__icon--cart',
+          '[data-cart-toggle]','[data-cart-drawer-trigger]',
+          '[data-cart-icon]','.cart-icon','.cart-link','.site-header__cart',
+          '[aria-label*="cart" i]','[href="/cart"]','[data-cart-icon-bubble]',
+          '.cart-count-bubble','[data-testid="cart-icon"]'
+        ];
+        for (var i = 0; i < tries.length; i++) {
+          var els = document.querySelectorAll(tries[i]);
+          for (var j = 0; j < els.length; j++) {
+            var el = els[j];
+            var r = el.getBoundingClientRect();
+            var style = window.getComputedStyle(el);
+            if (
+              r.width > 0 && r.height > 0 &&
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              r.top < window.innerHeight * 0.35
+            ) return el;
+          }
+        }
+        return null;
+      }
+
+
+
+    function findAddToCartButton() {
+      var selectors = [
+        'form[action*="/cart/add"] button[type="submit"]',
+        'form[action*="/cart/add"] input[type="submit"]',
+        '[name="add"]',
+        '[data-add-to-cart]',
+        '[data-product-form] button[type="submit"]',
+        '.product-form__submit',
+        '.add-to-cart',
+        '.btn--add-to-cart',
+        '.product-single__add-to-cart',
+        'button[aria-label*="add" i]',
+        'button:contains("Add to cart")'
+      ];
+
+      for (var i = 0; i < selectors.length; i++) {
+        var els = document.querySelectorAll(selectors[i]);
+
+        for (var j = 0; j < els.length; j++) {
+          var el = els[j];
+          if (!el) continue;
+
+          var style = window.getComputedStyle(el);
+          var r = el.getBoundingClientRect();
+
+          // ensure visible & clickable
+          var isVisible =
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            r.width > 0 &&
+            r.height > 0;
+
+          if (isVisible) return el;
+        }
+      }
+
       return null;
     }
 
-    var el = btn.parentElement;
-    var depth = 0;
-    while (el && el !== document.body && depth < 10) {
-      var found = _scanImgs(el);
-      if (found) return found;
-      if (el.tagName === 'MAIN') break; // searched all of <main>, stop
-      el = el.parentElement;
-      depth++;
-    }
 
-    // 4. Last resort: search the whole <main> for a large visible image
-    //    (catches layouts where image and form are in completely separate sections)
-    var main = document.querySelector('main, [role="main"], #main, #MainContent');
-    if (main) {
-      var found = _scanImgs(main);
-      if (found) return found;
-    }
 
-    return null;
-  }
 
-  // Kick off prefetch once DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _prefetchVariantImages);
-  } else {
-    _prefetchVariantImages();
-  }
 
-  var audioCtx = null;
-  var busy = false; // one animation at a time
+      /* Creates a small circular bubble that flies to the cart.
+         Priority: logo mode → brand logo
+                   product mode → ShopifyAnalytics → variant cache → DOM img → brand logo → emoji */
+      function makeBubble(btn) {
+        var brand  = FTC.branding || {};
+        var bubble = document.createElement('div');
+        var size   = 64;
+        var bg     = brand.bubbleBgColor || '#111827';
+        var imgUrl = '';
 
-  /* ─── Helpers ─────────────────────────────────────────── */
-
-  function ctx() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    return audioCtx;
-  }
-
-  function center(el) {
-    var r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }
-
-  function findCart() {
-    var tries = [
-      '.navlink--cart--icon','.navlink--cart','.header__icon--cart',
-      '[data-cart-toggle]','[data-cart-drawer-trigger]',
-      '[data-cart-icon]','.cart-icon','.cart-link','.site-header__cart',
-      '[aria-label*="cart" i]','[href="/cart"]','[data-cart-icon-bubble]',
-      '.cart-count-bubble','[data-testid="cart-icon"]'
-    ];
-    for (var i = 0; i < tries.length; i++) {
-      var els = document.querySelectorAll(tries[i]);
-      for (var j = 0; j < els.length; j++) {
-        var el = els[j];
-        var r = el.getBoundingClientRect();
-        var style = window.getComputedStyle(el);
-        if (
-          r.width > 0 && r.height > 0 &&
-          style.display !== 'none' &&
-          style.visibility !== 'hidden' &&
-          r.top < window.innerHeight * 0.35
-        ) return el;
-      }
-    }
-    return null;
-  }
-
-
-
-function findAddToCartButton() {
-  var selectors = [
-    'form[action*="/cart/add"] button[type="submit"]',
-    'form[action*="/cart/add"] input[type="submit"]',
-    '[name="add"]',
-    '[data-add-to-cart]',
-    '[data-product-form] button[type="submit"]',
-    '.product-form__submit',
-    '.add-to-cart',
-    '.btn--add-to-cart',
-    '.product-single__add-to-cart',
-    'button[aria-label*="add" i]',
-    'button:contains("Add to cart")'
-  ];
-
-  for (var i = 0; i < selectors.length; i++) {
-    var els = document.querySelectorAll(selectors[i]);
-
-    for (var j = 0; j < els.length; j++) {
-      var el = els[j];
-      if (!el) continue;
-
-      var style = window.getComputedStyle(el);
-      var r = el.getBoundingClientRect();
-
-      // ensure visible & clickable
-      var isVisible =
-        style.display !== 'none' &&
-        style.visibility !== 'hidden' &&
-        r.width > 0 &&
-        r.height > 0;
-
-      if (isVisible) return el;
-    }
-  }
-
-  return null;
-}
-
-
-
-
-
-  /* Creates a small circular bubble that flies to the cart.
-     Priority: logo mode → brand logo
-               product mode → ShopifyAnalytics → variant cache → DOM img → brand logo → emoji */
-  function makeBubble(btn) {
-    var brand  = FTC.branding || {};
-    var bubble = document.createElement('div');
-    var size   = 64;
-    var bg     = brand.bubbleBgColor || '#111827';
-    var imgUrl = '';
-
-    if (brand.bubbleMode === 'logo' && brand.logoImageUrl) {
-      imgUrl = brand.logoImageUrl;
-    } else {
-      imgUrl = _getProductImage(btn) || brand.logoImageUrl || '';
-    }
-
-    bubble.style.cssText = [
-      'background-color:' + bg,
-      'border-radius:50%',
-      'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
-      'border:3px solid #fff',
-      'overflow:hidden'
-    ].join(';');
-
-    if (imgUrl) {
-      var imgEl = document.createElement('img');
-      imgEl.src = imgUrl;
-      imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;';
-      bubble.appendChild(imgEl);
-    } else {
-      bubble.style.fontSize = '26px';
-      bubble.style.display  = 'flex';
-      bubble.style.alignItems = 'center';
-      bubble.style.justifyContent = 'center';
-      bubble.style.color = '#fff';
-      bubble.textContent = '🛍';
-    }
-
-    var from = btn.getBoundingClientRect();
-    var cx = from.left + from.width / 2 - size / 2;
-    var cy = from.top  + from.height / 2 - size / 2;
-
-    Object.assign(bubble.style, {
-      position: 'fixed',
-      left: cx + 'px',
-      top:  cy + 'px',
-      width:  size + 'px',
-      height: size + 'px',
-      pointerEvents: 'none',
-      zIndex: '99999',
-      transformOrigin: 'center center',
-    });
-    document.body.appendChild(bubble);
-    return { el: bubble, cx: cx + size/2, cy: cy + size/2 };
-  }
-
-  /* Quadratic bezier arc keyframes from (sx,sy) toward (ex,ey) */
-  function arcFrames(sx, sy, ex, ey, extraRotate) {
-    var cpx = sx + (ex - sx) * 0.25;
-    var cpy = Math.min(sy, ey) - 140;
-    var frames = [];
-    var N = 16;
-    for (var i = 0; i <= N; i++) {
-      var t  = i / N;
-      var et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease-in-out
-      var bx = (1-et)*(1-et)*sx + 2*(1-et)*et*cpx + et*et*ex;
-      var by = (1-et)*(1-et)*sy + 2*(1-et)*et*cpy + et*et*ey;
-      var sc = 1 - t * 0.85;
-      var op = t > 0.78 ? Math.max(0, 1-(t-0.78)/0.22) : 1;
-      var rot= extraRotate ? (t * extraRotate) + 'deg' : '0deg';
-      frames.push({
-        transform: 'translate('+(bx-sx)+'px,'+(by-sy)+'px) scale('+sc+') rotate('+rot+')',
-        opacity: op,
-        offset: t
-      });
-    }
-    return frames;
-  }
-
-  /* Ripple rings bursting from an element */
-  function ripples(el, color) {
-    var c = center(el);
-    [0, 160, 320].forEach(function(delay) {
-      var r = document.createElement('div');
-      Object.assign(r.style, {
-        position:'fixed', left:c.x+'px', top:c.y+'px',
-        width:'8px', height:'8px', borderRadius:'50%',
-        border:'2.5px solid '+(color||'#111'),
-        transform:'translate(-50%,-50%)',
-        pointerEvents:'none', zIndex:'99998'
-      });
-      document.body.appendChild(r);
-      var a = r.animate([
-        { width:'8px',  height:'8px',  opacity:0.85 },
-        { width:'88px', height:'88px', opacity:0    }
-      ], { duration:700, delay:delay, easing:'ease-out', fill:'forwards' });
-      a.onfinish = function() { r.remove(); };
-    });
-  }
-
-  /* Confetti / sparkle burst at (x, y) */
-  function sparkles(x, y) {
-    var colors = ['#FFD700','#FF6B6B','#4ECDC4','#C084FC','#34D399','#FB923C'];
-    for (var i = 0; i < 8; i++) {
-      (function(i) {
-        var angle = (i / 8) * Math.PI * 2;
-        var dist  = 45 + Math.random() * 35;
-        var s = document.createElement('div');
-        Object.assign(s.style, {
-          position:'fixed', left:x+'px', top:y+'px',
-          width: (5+Math.random()*5)+'px', height:(5+Math.random()*5)+'px',
-          borderRadius:'50%', background:colors[i % colors.length],
-          transform:'translate(-50%,-50%)',
-          pointerEvents:'none', zIndex:'99998'
-        });
-        document.body.appendChild(s);
-        var a = s.animate([
-          { transform:'translate(-50%,-50%) scale(1)',   opacity:1 },
-          { transform:'translate(calc(-50% + '+Math.cos(angle)*dist+'px),calc(-50% + '+Math.sin(angle)*dist+'px)) scale(0)', opacity:0 }
-        ], { duration:500+Math.random()*300, easing:'ease-out', fill:'forwards' });
-        a.onfinish = function() { s.remove(); };
-      })(i);
-    }
-  }
-
-  /* Cart impact: scale + wobble */
-  function cartImpact(cart, color) {
-    ripples(cart, color);
-    var c = center(cart);
-    sparkles(c.x, c.y);
-    cart.animate([
-      { transform:'scale(1) rotate(0deg)' },
-      { transform:'scale(1.35) rotate(-8deg)' },
-      { transform:'scale(1.1) rotate(5deg)' },
-      { transform:'scale(1.2) rotate(-3deg)' },
-      { transform:'scale(1) rotate(0deg)' }
-    ], { duration:450, easing:'cubic-bezier(0.36,0.07,0.19,0.97)' });
-  }
-
-  /* ─── Animations ──────────────────────────────────────── */
-
-  function doSlideIn(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx + 160;
-    var ey   = cart ? center(cart).y : b.cy - 160;
-
-    var a = b.el.animate(arcFrames(b.cx, b.cy, ex, ey, 0), {
-      duration: 1500, easing: 'linear', fill: 'forwards'
-    });
-    a.onfinish = function() {
-      b.el.remove();
-      if (cart) cartImpact(cart, '#111');
-    };
-  }
-
-  function doBounce(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx + 160;
-    var ey   = cart ? center(cart).y : b.cy - 120;
-    var dx   = ex - b.cx;
-    var dy   = ey - b.cy;
-
-    // Squash → stretch → 2 bounces → arc to cart (all in one timeline)
-    var a = b.el.animate([
-      { transform:'translate(0,0) scale(1,1)',       opacity:1, offset:0    },
-      { transform:'translate(0,6px) scale(1.25,0.75)', opacity:1, offset:0.06 }, // squash
-      { transform:'translate(0,-55px) scale(0.8,1.25)',opacity:1, offset:0.18 }, // stretch up
-      { transform:'translate(0,-55px) scale(1,1)',   opacity:1, offset:0.25 },
-      { transform:'translate(0,0) scale(1.15,0.85)', opacity:1, offset:0.36 }, // land bounce 1
-      { transform:'translate(0,-28px) scale(0.9,1.1)',opacity:1, offset:0.46 },
-      { transform:'translate(0,0) scale(1.08,0.92)', opacity:1, offset:0.54 }, // land bounce 2
-      { transform:'translate(0,-10px) scale(1,1)',   opacity:1, offset:0.60 },
-      { transform:'translate(0,0) scale(1,1)',        opacity:1, offset:0.64 },
-      // Arc phase
-      { transform:'translate('+(dx*0.3)+'px,'+(dy*0.3-90)+'px) scale(0.75)', opacity:1,   offset:0.77 },
-      { transform:'translate('+(dx*0.7)+'px,'+(dy*0.7-40)+'px) scale(0.45)', opacity:0.7, offset:0.90 },
-      { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',             opacity:0,   offset:1    },
-    ], { duration: 1500, easing:'linear', fill:'forwards' });
-
-    a.onfinish = function() {
-      b.el.remove();
-      if (cart) cartImpact(cart, '#F59E0B');
-    };
-  }
-
-  function doFlip(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx + 160;
-    var ey   = cart ? center(cart).y : b.cy - 140;
-    var dx   = ex - b.cx;
-    var dy   = ey - b.cy;
-
-    var a = b.el.animate([
-      { transform:'translate(0,0) rotateY(0deg) scale(1)',                         opacity:1,   filter:'blur(0px)', offset:0    },
-      { transform:'translate('+(dx*.18)+'px,'+(dy*.15)+'px) rotateY(180deg) scale(0.95)', opacity:1,   filter:'blur(3px)', offset:0.22 },
-      { transform:'translate('+(dx*.38)+'px,'+(dy*.30)+'px) rotateY(360deg) scale(0.85)', opacity:1,   filter:'blur(0px)', offset:0.44 },
-      { transform:'translate('+(dx*.60)+'px,'+(dy*.50)+'px) rotateY(540deg) scale(0.65)', opacity:0.9, filter:'blur(3px)', offset:0.66 },
-      { transform:'translate('+(dx*.82)+'px,'+(dy*.72)+'px) rotateY(680deg) scale(0.35)', opacity:0.5, filter:'blur(1px)', offset:0.85 },
-      { transform:'translate('+(dx)+'px,'+(dy)+'px) rotateY(720deg) scale(0.05)',         opacity:0,   filter:'blur(4px)', offset:1    },
-    ], { duration: 1500, easing:'cubic-bezier(0.42,0,0.58,1)', fill:'forwards' });
-
-    a.onfinish = function() {
-      b.el.remove();
-      if (cart) cartImpact(cart, '#6366F1');
-    };
-  }
-
-  function doPulse(btn) {
-    var cart = findCart();
-    var c = cart ? center(cart) : { x: window.innerWidth - 60, y: 60 };
-
-    if (cart) {
-      cart.animate([
-        { transform:'scale(1)',    offset:0    },
-        { transform:'scale(1.35)', offset:0.14 },
-        { transform:'scale(1.15)', offset:0.28 },
-        { transform:'scale(1.3)',  offset:0.42 },
-        { transform:'scale(1)',    offset:0.60 },
-        { transform:'scale(1)',    offset:1    },
-      ], { duration:700, easing:'ease-in-out' });
-    }
-
-    // 4 expanding colored rings
-    ['#111','#6366F1','#F59E0B','#34D399'].forEach(function(color, i) {
-      var ring = document.createElement('div');
-      Object.assign(ring.style, {
-        position:'fixed', left:c.x+'px', top:c.y+'px',
-        width:'10px', height:'10px', borderRadius:'50%',
-        border:'3px solid '+color,
-        transform:'translate(-50%,-50%)',
-        pointerEvents:'none', zIndex:'99998'
-      });
-      document.body.appendChild(ring);
-      var ra = ring.animate([
-        { width:'10px',  height:'10px',  opacity:0.9 },
-        { width:'100px', height:'100px', opacity:0   }
-      ], { duration:900, delay:i*120, easing:'ease-out', fill:'forwards' });
-      ra.onfinish = function() { ring.remove(); };
-    });
-
-    sparkles(c.x, c.y);
-  }
-
-
-
-
-  
-function doSpiral(btn) {
-  var b = makeBubble(btn);
-
-  // START = Add to Cart button position
-  var startEl = btn;
-
-  // END = Cart icon
-  var cart = findCart();
-
-  var sx = b.cx;
-  var sy = b.cy;
-
-  var ex = cart ? center(cart).x : sx + 200;
-  var ey = cart ? center(cart).y : sy - 150;
-
-  var frames = [];
-  var N = 22, turns = 2.8;
-
-  for (var i = 0; i <= N; i++) {
-    var t = i / N;
-
-    var ang = t * turns * Math.PI * 2;
-    var r = (1 - t) * 85;
-
-    // 🔥 IMPORTANT: interpolate from START → END
-    var tx = (ex - sx) * t + Math.cos(ang) * r;
-    var ty = (ey - sy) * t + Math.sin(ang) * r;
-
-    var sc = 1 - t * 0.88;
-    var op = t > 0.75 ? Math.max(0, 1 - (t - 0.75) / 0.25) : 1;
-
-    frames.push({
-      transform:
-        'translate(' + tx + 'px,' + ty + 'px) rotate(' + (t * turns * 360) + 'deg) scale(' + sc + ')',
-      opacity: op,
-      offset: t
-    });
-  }
-
-  var a = b.el.animate(frames, {
-    duration: 1300,
-    easing: 'ease-in',
-    fill: 'forwards'
-  });
-
-  var trailId = setInterval(function () {
-    var pos = b.el.getBoundingClientRect();
-    if (!pos.width) { clearInterval(trailId); return; }
-
-    var dot = document.createElement('div');
-    Object.assign(dot.style, {
-      position: 'fixed',
-      left: (pos.left + pos.width / 2) + 'px',
-      top: (pos.top + pos.height / 2) + 'px',
-      width: '7px',
-      height: '7px',
-      borderRadius: '50%',
-      background: 'rgba(139,92,246,0.55)',
-      transform: 'translate(-50%,-50%)',
-      pointerEvents: 'none',
-      zIndex: '99997'
-    });
-
-    document.body.appendChild(dot);
-
-    var da = dot.animate([
-      { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1)' },
-      { opacity: 0, transform: 'translate(-50%,-50%) scale(0.15)' }
-    ], {
-      duration: 450,
-      easing: 'ease-out',
-      fill: 'forwards'
-    });
-
-    da.onfinish = function () {
-      dot.remove();
-    };
-  }, 55);
-
-  a.onfinish = function () {
-    clearInterval(trailId);
-    b.el.remove();
-
-    if (cart) cartImpact(cart, '#8B5CF6');
-  };
-}
-
-
-
-
-  function doZoom(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx + 160;
-    var ey   = cart ? center(cart).y : b.cy - 160;
-    var dx   = ex - b.cx, dy = ey - b.cy;
-
-    var a = b.el.animate([
-      { transform:'translate(0,0) scale(0.1)',                                  opacity:0,   offset:0    },
-      { transform:'translate(0,0) scale(1.4)',                                  opacity:1,   offset:0.18 },
-      { transform:'translate(0,0) scale(1.0)',                                  opacity:1,   offset:0.28 },
-      { transform:'translate('+(dx*0.5)+'px,'+(dy*0.5-60)+'px) scale(0.65)',   opacity:1,   offset:0.65 },
-      { transform:'translate('+(dx*0.8)+'px,'+(dy*0.8-20)+'px) scale(0.3)',    opacity:0.5, offset:0.88 },
-      { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',              opacity:0,   offset:1    },
-    ], { duration:1500, easing:'ease-in-out', fill:'forwards' });
-
-    a.onfinish = function() {
-      b.el.remove();
-      if (cart) cartImpact(cart, '#10B981');
-    };
-  }
-
-  function doShake(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx + 160;
-    var ey   = cart ? center(cart).y : b.cy - 160;
-    var dx   = ex - b.cx, dy = ey - b.cy;
-
-    var a = b.el.animate([
-      { transform:'translate(0,0) scale(1)',                                    opacity:1,   offset:0    },
-      { transform:'translate(-10px,0) scale(1)',                                opacity:1,   offset:0.07 },
-      { transform:'translate(10px,0) scale(1)',                                 opacity:1,   offset:0.14 },
-      { transform:'translate(-8px,0) scale(1)',                                 opacity:1,   offset:0.21 },
-      { transform:'translate(8px,0) scale(1)',                                  opacity:1,   offset:0.28 },
-      { transform:'translate(-5px,0) scale(1)',                                 opacity:1,   offset:0.33 },
-      { transform:'translate(0,0) scale(1)',                                    opacity:1,   offset:0.38 },
-      { transform:'translate('+(dx*0.4)+'px,'+(dy*0.4-70)+'px) scale(0.65)',   opacity:1,   offset:0.68 },
-      { transform:'translate('+(dx*0.75)+'px,'+(dy*0.75-30)+'px) scale(0.3)',  opacity:0.6, offset:0.87 },
-      { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',              opacity:0,   offset:1    },
-    ], { duration:1000, easing:'linear', fill:'forwards' });
-
-    a.onfinish = function() {
-      b.el.remove();
-      if (cart) cartImpact(cart, '#EF4444');
-    };
-  }
-
-  function doFloat(btn) {
-    var b    = makeBubble(btn);
-    var cart = findCart();
-    var ex   = cart ? center(cart).x : b.cx;
-    var ey   = cart ? center(cart).y : b.cy - 200;
-    var dx   = ex - b.cx, dy = ey - b.cy;
-
-    var a = b.el.animate([
-      { transform:'translate(0,0) scale(1)',                                        opacity:1,   offset:0    },
-      { transform:'translate('+(dx*0.1-10)+'px,-40px) scale(1.05)',                opacity:1,   offset:0.15 },
-      { transform:'translate('+(dx*0.2)+'px,-80px) scale(1.0)',                    opacity:1,   offset:0.3  },
-      { transform:'translate('+(dx*0.4)+'px,'+(dy*0.3-200)+'px) scale(0.8)',        opacity:1,   offset:0.5  },
-      { transform:'translate('+(dx*0.7)+'px,'+(dy*0.65)+'px) scale(0.45)',         opacity:0.7, offset:0.78 },
-      { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',                 opacity:0,   offset:1    },
-    ], { duration:1400, easing:'ease-in-out', fill:'forwards' });
-
-    var glowId = setInterval(function() {
-      var pos = b.el.getBoundingClientRect();
-      if (!pos.width) { clearInterval(glowId); return; }
-      var dot = document.createElement('div');
-      Object.assign(dot.style, {
-        position:'fixed',
-        left:(pos.left + pos.width/2)+'px',
-        top: (pos.top  + pos.height/2)+'px',
-        width:'22px', height:'22px', borderRadius:'50%',
-        background:'rgba(251,191,36,0.45)',
-        transform:'translate(-50%,-50%)',
-        pointerEvents:'none', zIndex:'99997',
-        filter:'blur(5px)'
-      });
-      document.body.appendChild(dot);
-      var da = dot.animate([
-        { opacity:0.6, transform:'translate(-50%,-50%) scale(1)'   },
-        { opacity:0,   transform:'translate(-50%,-50%) scale(1.9)' }
-      ], { duration:600, easing:'ease-out', fill:'forwards' });
-      da.onfinish = function() { dot.remove(); };
-    }, 60);
-
-    a.onfinish = function() {
-      clearInterval(glowId);
-      b.el.remove();
-      if (cart) cartImpact(cart, '#FBBF24');
-    };
-  }
-
-  function playAnimation(btn) {
-    var map = {
-      slide_in: doSlideIn,
-      bounce:   doBounce,
-      flip:     doFlip,
-      pulse:    doPulse,
-      spiral:   doSpiral,
-      zoom:     doZoom,
-      shake:    doShake,
-      float:    doFloat,
-    };
-    var fn = map[FTC.animationKey];
-    if (fn) fn(btn);
-  }
-
-  /* ─── Sounds ──────────────────────────────────────────── */
-
-  function playSound(key) {
-    // Custom uploaded sound — play via Audio element
-    if (key === 'custom' && FTC.customSoundUrl) {
-      try {
-        var a = new Audio(FTC.customSoundUrl);
-        a.volume = 0.8;
-        a.play();
-      } catch(e) {}
-      return;
-    }
-
-    try {
-      var c = ctx(), t = c.currentTime;
-      ({
-        chime:   function() { [523,659,784,1047].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.28,t+i*0.1); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.1+0.35); o.start(t+i*0.1); o.stop(t+i*0.1+0.35); }); },
-        whoosh:  function() { var o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter(); o.type='sawtooth'; f.type='bandpass'; f.frequency.value=800; o.connect(f); f.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(600,t); o.frequency.exponentialRampToValueAtTime(80,t+0.55); g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.55); o.start(t); o.stop(t+0.55); },
-        pop:     function() { var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(55,t+0.12); g.gain.setValueAtTime(0.45,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.12); o.start(t); o.stop(t+0.12); },
-        bell:    function() { [800,1600].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.22,t+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,t+0.9); o.start(t+i*0.05); o.stop(t+0.9); }); },
-        sparkle: function() { [0,1,2,3].forEach(function(i){ var o=c.createOscillator(),g=c.createGain(); o.type='triangle'; o.connect(g); g.connect(c.destination); o.frequency.value=900+i*350; g.gain.setValueAtTime(0.18,t+i*0.12); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.12+0.2); o.start(t+i*0.12); o.stop(t+i*0.12+0.2); }); },
-        coin:    function() { [1200,1500,1800,1400].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='triangle'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.2,t+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.05+0.12); o.start(t+i*0.05); o.stop(t+i*0.05+0.12); }); },
-        laser:   function() { var o=c.createOscillator(),g=c.createGain(); o.type='sawtooth'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(1200,t); o.frequency.exponentialRampToValueAtTime(80,t+0.25); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.start(t); o.stop(t+0.25); },
-        drum:    function() { var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(30,t+0.15); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2); o.start(t); o.stop(t+0.2); },
-      })[key]?.();
-    } catch(e) {}
-  }
-
-  // If the cache is empty at click time, try to fetch the product by handle
-  // (from a card link or ShopifyAnalytics) and wait up to 300 ms before animating.
-  // Fixes collection / quick-buy pages where prefetch may not have run yet.
-  function _ensureImageThenAnimate(btn) {
-    var form   = btn.closest('form[action*="/cart/add"]');
-    var varInp = form && form.querySelector('[name="id"]');
-    var vid    = varInp && varInp.value;
-
-    if (vid && _imgCache[vid]) { playAnimation(btn); return; }
-
-    var handle = _getHandleFromCard(btn);
-    if (!handle) {
-      try {
-        var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
-        if (m && m.product && m.product.handle) handle = m.product.handle;
-      } catch(e) {}
-    }
-
-    if (!handle) { playAnimation(btn); return; }
-
-    var done  = false;
-    var guard = setTimeout(function() {
-      if (!done) { done = true; playAnimation(btn); }
-    }, 300);
-
-    fetch('/products/' + handle + '.js')
-      .then(function(r) { return r.json(); })
-      .then(function(p) {
-        if (done) return;
-        clearTimeout(guard);
-        done = true;
-        var src = p && p.featured_image;
-        if (src) {
-          if (vid) _imgCache[vid] = src;
-          if (p.variants) p.variants.forEach(function(v) { if (!_imgCache[v.id]) _imgCache[v.id] = src; });
+        if (brand.bubbleMode === 'logo' && brand.logoImageUrl) {
+          imgUrl = brand.logoImageUrl;
+        } else {
+          imgUrl = _getProductImage(btn) || brand.logoImageUrl || '';
         }
-        playAnimation(btn);
-      })
-      .catch(function() { if (!done) { done = true; playAnimation(btn); } });
-  }
 
-  /* ─── Click listener ──────────────────────────────────── */
+        bubble.style.cssText = [
+          'background-color:' + bg,
+          'border-radius:50%',
+          'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
+          'border:3px solid #fff',
+          'overflow:hidden'
+        ].join(';');
 
-  document.addEventListener('click', function(e) {
-    if (busy) return;
-    var btn = e.target.closest('[data-add-to-cart],[name="add"],button[type="submit"],[data-cart-add]');
-    if (!btn) return;
-    var txt = (btn.textContent || btn.value || '').trim();
-    var isCartBtn = /add.to.(cart|bag)|add.to.bag/i.test(txt)
-                 || btn.hasAttribute('data-add-to-cart')
-                 || btn.getAttribute('name') === 'add';
-    if (!isCartBtn) return;
+        if (imgUrl) {
+          var imgEl = document.createElement('img');
+          imgEl.src = imgUrl;
+          imgEl.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:50%;';
+          bubble.appendChild(imgEl);
+        } else {
+          bubble.style.fontSize = '26px';
+          bubble.style.display  = 'flex';
+          bubble.style.alignItems = 'center';
+          bubble.style.justifyContent = 'center';
+          bubble.style.color = '#fff';
+          bubble.textContent = '🛍';
+        }
 
-    busy = true;
-    setTimeout(function() { busy = false; }, 1800);
+        var from = btn.getBoundingClientRect();
+        var cx = from.left + from.width / 2 - size / 2;
+        var cy = from.top  + from.height / 2 - size / 2;
 
-    if (FTC.soundKey)     playSound(FTC.soundKey);
-    if (FTC.animationKey) _ensureImageThenAnimate(btn);
-  });
-})();
-</script>
+        Object.assign(bubble.style, {
+          position: 'fixed',
+          left: cx + 'px',
+          top:  cy + 'px',
+          width:  size + 'px',
+          height: size + 'px',
+          pointerEvents: 'none',
+          zIndex: '99999',
+          transformOrigin: 'center center',
+        });
+        document.body.appendChild(bubble);
+        return { el: bubble, cx: cx + size/2, cy: cy + size/2 };
+      }
+
+      /* Quadratic bezier arc keyframes from (sx,sy) toward (ex,ey) */
+      function arcFrames(sx, sy, ex, ey, extraRotate) {
+        var cpx = sx + (ex - sx) * 0.25;
+        var cpy = Math.min(sy, ey) - 140;
+        var frames = [];
+        var N = 16;
+        for (var i = 0; i <= N; i++) {
+          var t  = i / N;
+          var et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease-in-out
+          var bx = (1-et)*(1-et)*sx + 2*(1-et)*et*cpx + et*et*ex;
+          var by = (1-et)*(1-et)*sy + 2*(1-et)*et*cpy + et*et*ey;
+          var sc = 1 - t * 0.85;
+          var op = t > 0.78 ? Math.max(0, 1-(t-0.78)/0.22) : 1;
+          var rot= extraRotate ? (t * extraRotate) + 'deg' : '0deg';
+          frames.push({
+            transform: 'translate('+(bx-sx)+'px,'+(by-sy)+'px) scale('+sc+') rotate('+rot+')',
+            opacity: op,
+            offset: t
+          });
+        }
+        return frames;
+      }
+
+      /* Ripple rings bursting from an element */
+      function ripples(el, color) {
+        var c = center(el);
+        [0, 160, 320].forEach(function(delay) {
+          var r = document.createElement('div');
+          Object.assign(r.style, {
+            position:'fixed', left:c.x+'px', top:c.y+'px',
+            width:'8px', height:'8px', borderRadius:'50%',
+            border:'2.5px solid '+(color||'#111'),
+            transform:'translate(-50%,-50%)',
+            pointerEvents:'none', zIndex:'99998'
+          });
+          document.body.appendChild(r);
+          var a = r.animate([
+            { width:'8px',  height:'8px',  opacity:0.85 },
+            { width:'88px', height:'88px', opacity:0    }
+          ], { duration:700, delay:delay, easing:'ease-out', fill:'forwards' });
+          a.onfinish = function() { r.remove(); };
+        });
+      }
+
+      /* Confetti / sparkle burst at (x, y) */
+      function sparkles(x, y) {
+        var colors = ['#FFD700','#FF6B6B','#4ECDC4','#C084FC','#34D399','#FB923C'];
+        for (var i = 0; i < 8; i++) {
+          (function(i) {
+            var angle = (i / 8) * Math.PI * 2;
+            var dist  = 45 + Math.random() * 35;
+            var s = document.createElement('div');
+            Object.assign(s.style, {
+              position:'fixed', left:x+'px', top:y+'px',
+              width: (5+Math.random()*5)+'px', height:(5+Math.random()*5)+'px',
+              borderRadius:'50%', background:colors[i % colors.length],
+              transform:'translate(-50%,-50%)',
+              pointerEvents:'none', zIndex:'99998'
+            });
+            document.body.appendChild(s);
+            var a = s.animate([
+              { transform:'translate(-50%,-50%) scale(1)',   opacity:1 },
+              { transform:'translate(calc(-50% + '+Math.cos(angle)*dist+'px),calc(-50% + '+Math.sin(angle)*dist+'px)) scale(0)', opacity:0 }
+            ], { duration:500+Math.random()*300, easing:'ease-out', fill:'forwards' });
+            a.onfinish = function() { s.remove(); };
+          })(i);
+        }
+      }
+
+      /* Cart impact: scale + wobble */
+      function cartImpact(cart, color) {
+        ripples(cart, color);
+        var c = center(cart);
+        sparkles(c.x, c.y);
+        cart.animate([
+          { transform:'scale(1) rotate(0deg)' },
+          { transform:'scale(1.35) rotate(-8deg)' },
+          { transform:'scale(1.1) rotate(5deg)' },
+          { transform:'scale(1.2) rotate(-3deg)' },
+          { transform:'scale(1) rotate(0deg)' }
+        ], { duration:450, easing:'cubic-bezier(0.36,0.07,0.19,0.97)' });
+      }
+
+      /* ─── Animations ──────────────────────────────────────── */
+
+      function doSlideIn(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx + 160;
+        var ey   = cart ? center(cart).y : b.cy - 160;
+
+        var a = b.el.animate(arcFrames(b.cx, b.cy, ex, ey, 0), {
+          duration: 1500, easing: 'linear', fill: 'forwards'
+        });
+        a.onfinish = function() {
+          b.el.remove();
+          if (cart) cartImpact(cart, '#111');
+        };
+      }
+
+      function doBounce(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx + 160;
+        var ey   = cart ? center(cart).y : b.cy - 120;
+        var dx   = ex - b.cx;
+        var dy   = ey - b.cy;
+
+        // Squash → stretch → 2 bounces → arc to cart (all in one timeline)
+        var a = b.el.animate([
+          { transform:'translate(0,0) scale(1,1)',       opacity:1, offset:0    },
+          { transform:'translate(0,6px) scale(1.25,0.75)', opacity:1, offset:0.06 }, // squash
+          { transform:'translate(0,-55px) scale(0.8,1.25)',opacity:1, offset:0.18 }, // stretch up
+          { transform:'translate(0,-55px) scale(1,1)',   opacity:1, offset:0.25 },
+          { transform:'translate(0,0) scale(1.15,0.85)', opacity:1, offset:0.36 }, // land bounce 1
+          { transform:'translate(0,-28px) scale(0.9,1.1)',opacity:1, offset:0.46 },
+          { transform:'translate(0,0) scale(1.08,0.92)', opacity:1, offset:0.54 }, // land bounce 2
+          { transform:'translate(0,-10px) scale(1,1)',   opacity:1, offset:0.60 },
+          { transform:'translate(0,0) scale(1,1)',        opacity:1, offset:0.64 },
+          // Arc phase
+          { transform:'translate('+(dx*0.3)+'px,'+(dy*0.3-90)+'px) scale(0.75)', opacity:1,   offset:0.77 },
+          { transform:'translate('+(dx*0.7)+'px,'+(dy*0.7-40)+'px) scale(0.45)', opacity:0.7, offset:0.90 },
+          { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',             opacity:0,   offset:1    },
+        ], { duration: 1500, easing:'linear', fill:'forwards' });
+
+        a.onfinish = function() {
+          b.el.remove();
+          if (cart) cartImpact(cart, '#F59E0B');
+        };
+      }
+
+      function doFlip(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx + 160;
+        var ey   = cart ? center(cart).y : b.cy - 140;
+        var dx   = ex - b.cx;
+        var dy   = ey - b.cy;
+
+        var a = b.el.animate([
+          { transform:'translate(0,0) rotateY(0deg) scale(1)',                         opacity:1,   filter:'blur(0px)', offset:0    },
+          { transform:'translate('+(dx*.18)+'px,'+(dy*.15)+'px) rotateY(180deg) scale(0.95)', opacity:1,   filter:'blur(3px)', offset:0.22 },
+          { transform:'translate('+(dx*.38)+'px,'+(dy*.30)+'px) rotateY(360deg) scale(0.85)', opacity:1,   filter:'blur(0px)', offset:0.44 },
+          { transform:'translate('+(dx*.60)+'px,'+(dy*.50)+'px) rotateY(540deg) scale(0.65)', opacity:0.9, filter:'blur(3px)', offset:0.66 },
+          { transform:'translate('+(dx*.82)+'px,'+(dy*.72)+'px) rotateY(680deg) scale(0.35)', opacity:0.5, filter:'blur(1px)', offset:0.85 },
+          { transform:'translate('+(dx)+'px,'+(dy)+'px) rotateY(720deg) scale(0.05)',         opacity:0,   filter:'blur(4px)', offset:1    },
+        ], { duration: 1500, easing:'cubic-bezier(0.42,0,0.58,1)', fill:'forwards' });
+
+        a.onfinish = function() {
+          b.el.remove();
+          if (cart) cartImpact(cart, '#6366F1');
+        };
+      }
+
+      function doPulse(btn) {
+        var cart = findCart();
+        var c = cart ? center(cart) : { x: window.innerWidth - 60, y: 60 };
+
+        if (cart) {
+          cart.animate([
+            { transform:'scale(1)',    offset:0    },
+            { transform:'scale(1.35)', offset:0.14 },
+            { transform:'scale(1.15)', offset:0.28 },
+            { transform:'scale(1.3)',  offset:0.42 },
+            { transform:'scale(1)',    offset:0.60 },
+            { transform:'scale(1)',    offset:1    },
+          ], { duration:700, easing:'ease-in-out' });
+        }
+
+        // 4 expanding colored rings
+        ['#111','#6366F1','#F59E0B','#34D399'].forEach(function(color, i) {
+          var ring = document.createElement('div');
+          Object.assign(ring.style, {
+            position:'fixed', left:c.x+'px', top:c.y+'px',
+            width:'10px', height:'10px', borderRadius:'50%',
+            border:'3px solid '+color,
+            transform:'translate(-50%,-50%)',
+            pointerEvents:'none', zIndex:'99998'
+          });
+          document.body.appendChild(ring);
+          var ra = ring.animate([
+            { width:'10px',  height:'10px',  opacity:0.9 },
+            { width:'100px', height:'100px', opacity:0   }
+          ], { duration:900, delay:i*120, easing:'ease-out', fill:'forwards' });
+          ra.onfinish = function() { ring.remove(); };
+        });
+
+        sparkles(c.x, c.y);
+      }
+
+
+
+
+
+    function doSpiral(btn) {
+      var b = makeBubble(btn);
+
+      // START = Add to Cart button position
+      var startEl = btn;
+
+      // END = Cart icon
+      var cart = findCart();
+
+      var sx = b.cx;
+      var sy = b.cy;
+
+      var ex = cart ? center(cart).x : sx + 200;
+      var ey = cart ? center(cart).y : sy - 150;
+
+      var frames = [];
+      var N = 22, turns = 2.8;
+
+      for (var i = 0; i <= N; i++) {
+        var t = i / N;
+
+        var ang = t * turns * Math.PI * 2;
+        var r = (1 - t) * 85;
+
+        // 🔥 IMPORTANT: interpolate from START → END
+        var tx = (ex - sx) * t + Math.cos(ang) * r;
+        var ty = (ey - sy) * t + Math.sin(ang) * r;
+
+        var sc = 1 - t * 0.88;
+        var op = t > 0.75 ? Math.max(0, 1 - (t - 0.75) / 0.25) : 1;
+
+        frames.push({
+          transform:
+            'translate(' + tx + 'px,' + ty + 'px) rotate(' + (t * turns * 360) + 'deg) scale(' + sc + ')',
+          opacity: op,
+          offset: t
+        });
+      }
+
+      var a = b.el.animate(frames, {
+        duration: 1300,
+        easing: 'ease-in',
+        fill: 'forwards'
+      });
+
+      var trailId = setInterval(function () {
+        var pos = b.el.getBoundingClientRect();
+        if (!pos.width) { clearInterval(trailId); return; }
+
+        var dot = document.createElement('div');
+        Object.assign(dot.style, {
+          position: 'fixed',
+          left: (pos.left + pos.width / 2) + 'px',
+          top: (pos.top + pos.height / 2) + 'px',
+          width: '7px',
+          height: '7px',
+          borderRadius: '50%',
+          background: 'rgba(139,92,246,0.55)',
+          transform: 'translate(-50%,-50%)',
+          pointerEvents: 'none',
+          zIndex: '99997'
+        });
+
+        document.body.appendChild(dot);
+
+        var da = dot.animate([
+          { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1)' },
+          { opacity: 0, transform: 'translate(-50%,-50%) scale(0.15)' }
+        ], {
+          duration: 450,
+          easing: 'ease-out',
+          fill: 'forwards'
+        });
+
+        da.onfinish = function () {
+          dot.remove();
+        };
+      }, 55);
+
+      a.onfinish = function () {
+        clearInterval(trailId);
+        b.el.remove();
+
+        if (cart) cartImpact(cart, '#8B5CF6');
+      };
+    }
+
+
+
+
+      function doZoom(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx + 160;
+        var ey   = cart ? center(cart).y : b.cy - 160;
+        var dx   = ex - b.cx, dy = ey - b.cy;
+
+        var a = b.el.animate([
+          { transform:'translate(0,0) scale(0.1)',                                  opacity:0,   offset:0    },
+          { transform:'translate(0,0) scale(1.4)',                                  opacity:1,   offset:0.18 },
+          { transform:'translate(0,0) scale(1.0)',                                  opacity:1,   offset:0.28 },
+          { transform:'translate('+(dx*0.5)+'px,'+(dy*0.5-60)+'px) scale(0.65)',   opacity:1,   offset:0.65 },
+          { transform:'translate('+(dx*0.8)+'px,'+(dy*0.8-20)+'px) scale(0.3)',    opacity:0.5, offset:0.88 },
+          { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',              opacity:0,   offset:1    },
+        ], { duration:1500, easing:'ease-in-out', fill:'forwards' });
+
+        a.onfinish = function() {
+          b.el.remove();
+          if (cart) cartImpact(cart, '#10B981');
+        };
+      }
+
+      function doShake(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx + 160;
+        var ey   = cart ? center(cart).y : b.cy - 160;
+        var dx   = ex - b.cx, dy = ey - b.cy;
+
+        var a = b.el.animate([
+          { transform:'translate(0,0) scale(1)',                                    opacity:1,   offset:0    },
+          { transform:'translate(-10px,0) scale(1)',                                opacity:1,   offset:0.07 },
+          { transform:'translate(10px,0) scale(1)',                                 opacity:1,   offset:0.14 },
+          { transform:'translate(-8px,0) scale(1)',                                 opacity:1,   offset:0.21 },
+          { transform:'translate(8px,0) scale(1)',                                  opacity:1,   offset:0.28 },
+          { transform:'translate(-5px,0) scale(1)',                                 opacity:1,   offset:0.33 },
+          { transform:'translate(0,0) scale(1)',                                    opacity:1,   offset:0.38 },
+          { transform:'translate('+(dx*0.4)+'px,'+(dy*0.4-70)+'px) scale(0.65)',   opacity:1,   offset:0.68 },
+          { transform:'translate('+(dx*0.75)+'px,'+(dy*0.75-30)+'px) scale(0.3)',  opacity:0.6, offset:0.87 },
+          { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',              opacity:0,   offset:1    },
+        ], { duration:1000, easing:'linear', fill:'forwards' });
+
+        a.onfinish = function() {
+          b.el.remove();
+          if (cart) cartImpact(cart, '#EF4444');
+        };
+      }
+
+      function doFloat(btn) {
+        var b    = makeBubble(btn);
+        var cart = findCart();
+        var ex   = cart ? center(cart).x : b.cx;
+        var ey   = cart ? center(cart).y : b.cy - 200;
+        var dx   = ex - b.cx, dy = ey - b.cy;
+
+        var a = b.el.animate([
+          { transform:'translate(0,0) scale(1)',                                        opacity:1,   offset:0    },
+          { transform:'translate('+(dx*0.1-10)+'px,-40px) scale(1.05)',                opacity:1,   offset:0.15 },
+          { transform:'translate('+(dx*0.2)+'px,-80px) scale(1.0)',                    opacity:1,   offset:0.3  },
+          { transform:'translate('+(dx*0.4)+'px,'+(dy*0.3-200)+'px) scale(0.8)',        opacity:1,   offset:0.5  },
+          { transform:'translate('+(dx*0.7)+'px,'+(dy*0.65)+'px) scale(0.45)',         opacity:0.7, offset:0.78 },
+          { transform:'translate('+(dx)+'px,'+(dy)+'px) scale(0.05)',                 opacity:0,   offset:1    },
+        ], { duration:1400, easing:'ease-in-out', fill:'forwards' });
+
+        var glowId = setInterval(function() {
+          var pos = b.el.getBoundingClientRect();
+          if (!pos.width) { clearInterval(glowId); return; }
+          var dot = document.createElement('div');
+          Object.assign(dot.style, {
+            position:'fixed',
+            left:(pos.left + pos.width/2)+'px',
+            top: (pos.top  + pos.height/2)+'px',
+            width:'22px', height:'22px', borderRadius:'50%',
+            background:'rgba(251,191,36,0.45)',
+            transform:'translate(-50%,-50%)',
+            pointerEvents:'none', zIndex:'99997',
+            filter:'blur(5px)'
+          });
+          document.body.appendChild(dot);
+          var da = dot.animate([
+            { opacity:0.6, transform:'translate(-50%,-50%) scale(1)'   },
+            { opacity:0,   transform:'translate(-50%,-50%) scale(1.9)' }
+          ], { duration:600, easing:'ease-out', fill:'forwards' });
+          da.onfinish = function() { dot.remove(); };
+        }, 60);
+
+        a.onfinish = function() {
+          clearInterval(glowId);
+          b.el.remove();
+          if (cart) cartImpact(cart, '#FBBF24');
+        };
+      }
+
+      function playAnimation(btn) {
+        var map = {
+          slide_in: doSlideIn,
+          bounce:   doBounce,
+          flip:     doFlip,
+          pulse:    doPulse,
+          spiral:   doSpiral,
+          zoom:     doZoom,
+          shake:    doShake,
+          float:    doFloat,
+        };
+        var fn = map[FTC.animationKey];
+        if (fn) fn(btn);
+      }
+
+      /* ─── Sounds ──────────────────────────────────────────── */
+
+      function playSound(key) {
+        // Custom uploaded sound — play via Audio element
+        if (key === 'custom' && FTC.customSoundUrl) {
+          try {
+            var a = new Audio(FTC.customSoundUrl);
+            a.volume = 0.8;
+            a.play();
+          } catch(e) {}
+          return;
+        }
+
+        try {
+          var c = ctx(), t = c.currentTime;
+          ({
+            chime:   function() { [523,659,784,1047].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.28,t+i*0.1); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.1+0.35); o.start(t+i*0.1); o.stop(t+i*0.1+0.35); }); },
+            whoosh:  function() { var o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter(); o.type='sawtooth'; f.type='bandpass'; f.frequency.value=800; o.connect(f); f.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(600,t); o.frequency.exponentialRampToValueAtTime(80,t+0.55); g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.55); o.start(t); o.stop(t+0.55); },
+            pop:     function() { var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(55,t+0.12); g.gain.setValueAtTime(0.45,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.12); o.start(t); o.stop(t+0.12); },
+            bell:    function() { [800,1600].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.22,t+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,t+0.9); o.start(t+i*0.05); o.stop(t+0.9); }); },
+            sparkle: function() { [0,1,2,3].forEach(function(i){ var o=c.createOscillator(),g=c.createGain(); o.type='triangle'; o.connect(g); g.connect(c.destination); o.frequency.value=900+i*350; g.gain.setValueAtTime(0.18,t+i*0.12); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.12+0.2); o.start(t+i*0.12); o.stop(t+i*0.12+0.2); }); },
+            coin:    function() { [1200,1500,1800,1400].forEach(function(f,i){ var o=c.createOscillator(),g=c.createGain(); o.type='triangle'; o.connect(g); g.connect(c.destination); o.frequency.value=f; g.gain.setValueAtTime(0.2,t+i*0.05); g.gain.exponentialRampToValueAtTime(0.001,t+i*0.05+0.12); o.start(t+i*0.05); o.stop(t+i*0.05+0.12); }); },
+            laser:   function() { var o=c.createOscillator(),g=c.createGain(); o.type='sawtooth'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(1200,t); o.frequency.exponentialRampToValueAtTime(80,t+0.25); g.gain.setValueAtTime(0.3,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.25); o.start(t); o.stop(t+0.25); },
+            drum:    function() { var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.connect(g); g.connect(c.destination); o.frequency.setValueAtTime(160,t); o.frequency.exponentialRampToValueAtTime(30,t+0.15); g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.2); o.start(t); o.stop(t+0.2); },
+          })[key]?.();
+        } catch(e) {}
+      }
+
+      // If the cache is empty at click time, try to fetch the product by handle
+      // (from a card link or ShopifyAnalytics) and wait up to 300 ms before animating.
+      // Fixes collection / quick-buy pages where prefetch may not have run yet.
+      function _ensureImageThenAnimate(btn) {
+        var form   = btn.closest('form[action*="/cart/add"]');
+        var varInp = form && form.querySelector('[name="id"]');
+        var vid    = varInp && varInp.value;
+
+        if (vid && _imgCache[vid]) { playAnimation(btn); return; }
+
+        var handle = _getHandleFromCard(btn);
+        if (!handle) {
+          try {
+            var m = window.ShopifyAnalytics && window.ShopifyAnalytics.meta;
+            if (m && m.product && m.product.handle) handle = m.product.handle;
+          } catch(e) {}
+        }
+
+        if (!handle) { playAnimation(btn); return; }
+
+        var done  = false;
+        var guard = setTimeout(function() {
+          if (!done) { done = true; playAnimation(btn); }
+        }, 300);
+
+        fetch('/products/' + handle + '.js')
+          .then(function(r) { return r.json(); })
+          .then(function(p) {
+            if (done) return;
+            clearTimeout(guard);
+            done = true;
+            var src = p && p.featured_image;
+            if (src) {
+              if (vid) _imgCache[vid] = src;
+              if (p.variants) p.variants.forEach(function(v) { if (!_imgCache[v.id]) _imgCache[v.id] = src; });
+            }
+            playAnimation(btn);
+          })
+          .catch(function() { if (!done) { done = true; playAnimation(btn); } });
+      }
+
+      /* ─── Click listener ──────────────────────────────────── */
+
+      document.addEventListener('click', function(e) {
+        if (busy) return;
+        var btn = e.target.closest('[data-add-to-cart],[name="add"],button[type="submit"],[data-cart-add]');
+        if (!btn) return;
+        var txt = (btn.textContent || btn.value || '').trim();
+        var isCartBtn = /add.to.(cart|bag)|add.to.bag/i.test(txt)
+                     || btn.hasAttribute('data-add-to-cart')
+                     || btn.getAttribute('name') === 'add';
+        if (!isCartBtn) return;
+
+        busy = true;
+        setTimeout(function() { busy = false; }, 1800);
+
+        if (FTC.soundKey)     playSound(FTC.soundKey);
+        if (FTC.animationKey) _ensureImageThenAnimate(btn);
+      });
+    })();
+  </script>
 {% endif %}
 
 {% schema %}

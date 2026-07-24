@@ -59,7 +59,7 @@ const stepCardStyle: React.CSSProperties = {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  await requireActiveSubscription(session.shop);
+  await requireActiveSubscription(session.shop, request);
   const configs = await fetchConfigurations(admin);
   return { configs };
 };

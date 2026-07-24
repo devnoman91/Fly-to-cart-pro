@@ -43,7 +43,7 @@ const SOUNDS: Record<string, { name: string; icon: string }> = {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  await requireActiveSubscription(session.shop);
+  await requireActiveSubscription(session.shop, request);
   const configs = await fetchConfigurations(admin);
   return { configs };
 };
