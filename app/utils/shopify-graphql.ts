@@ -294,7 +294,9 @@ export async function saveBranding(admin: any, branding: FtcBranding): Promise<v
 
 export type FtcConfig = {
   id: string;
+  /** Animation key, or "" when the merchant picked sound only */
   animationKey: string;
+  /** Sound key, or "" when the merchant picked animation only */
   soundKey: string;
   customSoundUrl?: string;
   live: boolean;

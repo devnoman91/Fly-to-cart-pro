@@ -22,10 +22,23 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   billing: {
+    // $5 Basic. Keep this key ("pro") — existing subscribers match on it and keep
+    // their original price until they resubscribe; only new charges bill at $5.
     pro: {
       lineItems: [
         {
-          amount: 3,
+          amount: 5,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days,
+        },
+      ],
+      trialDays: 0,
+    },
+    // $10 Premium — unlocks single-mode configs + branding customization.
+    premium: {
+      lineItems: [
+        {
+          amount: 10,
           currencyCode: "USD",
           interval: BillingInterval.Every30Days,
         },

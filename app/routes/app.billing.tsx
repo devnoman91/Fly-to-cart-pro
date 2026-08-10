@@ -31,8 +31,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent");
 
   if (intent === "subscribe") {
+    const plan = String(formData.get("plan") || "");
     try {
-      return await requestPlan(request);
+      return await requestPlan(request, plan);
     } catch (err: unknown) {
       if (err instanceof Response) throw err;
       if (getErrorMessage(err, "") === "BILLING_UNAVAILABLE") {
@@ -54,6 +55,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return null;
 };
 
+type PlanCard = {
+  key: string;
+  name: string;
+  price: number;
+  tagline: string;
+  features: string[];
+  highlight?: boolean;
+};
+
+const PLANS: PlanCard[] = [
+  {
+    key: "pro", // matches PLAN_BASIC — do not change
+    name: "Basic",
+    price: 5,
+    tagline: "An animation and a sound together on every add to cart.",
+    features: [
+      "All 8 animation styles",
+      "All 8 sound effects",
+      "Animation + sound together",
+      "Unlimited saved effects",
+      "One-click live / stop toggle",
+      "App embed for any theme",
+    ],
+  },
+  {
+    key: "premium", // matches PLAN_PREMIUM
+    name: "Premium",
+    price: 10,
+    tagline: "Everything in Basic, plus flexible effects and custom branding.",
+    features: [
+      "Everything in Basic",
+      "Animation-only effects",
+      "Sound-only effects",
+      "Custom logo in the flying bubble",
+      "Custom bubble background color",
+      "Priority support",
+    ],
+    highlight: true,
+  },
+];
+
 export default function BillingPage() {
   const { subscription, trialEndsAt, trialExpired } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -70,31 +112,25 @@ export default function BillingPage() {
     : null;
   const trialProgress = trialDaysLeft === null ? 100 : Math.min(((14 - trialDaysLeft) / 14) * 100, 100);
 
-  const features = [
-    "All 8 animation styles (Slide In, Bounce, Flip, Pulse, Spiral)",
-    "All 8 sound effects (Chime, Whoosh, Pop, Bell, Sparkle)",
-    "Unlimited animation saves",
-    "One-click live/stop toggle",
-    "App embed for any Shopify theme",
-    "Priority support",
-  ];
+  // The plan a shop is billed on right now (null during trial / when unpaid).
+  const currentPlanKey = isActive ? subscription?.planName ?? null : null;
 
   const faqs = [
     {
       q: "How does the 14-day free trial work?",
-      a: "You get full access for 14 days from the moment you install the app — no card required, nothing to click. After 14 days, subscribe for $3/month to keep access.",
+      a: "You get full Premium access for 14 days from the moment you install — no card required, nothing to click. Before it ends, pick the plan that fits your store.",
     },
     {
-      q: "Are there any feature restrictions?",
-      a: "None. Every animation, sound, and feature is fully available. Just pay $3/month and use everything.",
+      q: "What's the difference between Basic and Premium?",
+      a: "Basic ($5/mo) plays an animation and a sound together on add to cart. Premium ($10/mo) adds animation-only and sound-only effects plus custom branding — your logo in the flying bubble and a custom bubble color.",
+    },
+    {
+      q: "Can I switch plans later?",
+      a: "Yes. Upgrade or downgrade any time from this page — Shopify swaps the subscription and prorates the difference automatically.",
     },
     {
       q: "What happens if I uninstall the app?",
       a: "Your subscription is cancelled automatically. All animation data stored in your shop metafields is cleaned up within 30 days.",
-    },
-    {
-      q: "Can I cancel any time?",
-      a: "Yes. Cancel from this page any time. Shopify will prorate any unused days.",
     },
   ];
 
@@ -125,7 +161,8 @@ export default function BillingPage() {
             Fly to Cart Pro
           </h1>
           <p style={{ ...mutedText, margin: 0 }}>
-            One plan. Every feature. $3&nbsp;/&nbsp;month.
+            Two plans. Start at $5&nbsp;/&nbsp;month, or unlock single-mode effects and
+            branding with Premium at $10&nbsp;/&nbsp;month.
           </p>
         </div>
 
@@ -154,11 +191,13 @@ export default function BillingPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
               {isActive ? (
                 <div>
-                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>Subscription active</h3>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>
+                    {currentPlanKey === "premium" ? "Premium plan active" : "Basic plan active"}
+                  </h3>
                   <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
                     {subscription?.billingOn
                       ? `Next billing: ${formatDate(subscription.billingOn)}`
-                      : "Pro plan active through Shopify."}
+                      : "Active through Shopify."}
                   </p>
                 </div>
               ) : (
@@ -184,68 +223,109 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Plan card */}
-        <div style={{ ...cardStyle, marginBottom: "16px", borderWidth: isActive ? "2px" : "1px", borderColor: isActive ? "#111827" : "#d7d7d7" }}>
-          {isActive && (
-            <div style={{ display: "inline-block", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "11px", fontWeight: 700, marginBottom: "16px" }}>
-              CURRENT PLAN
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
-            <div>
-              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 750, color: "#111827" }}>Pro</h2>
-              <p style={{ ...mutedText, margin: 0 }}>
-                {isActive ? "Your Pro plan is active. Full access is enabled." : "Full access. No restrictions."}
-              </p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <span style={{ fontSize: "36px", fontWeight: 800, color: "#000" }}>$3</span>
-              <span style={{ fontSize: "14px", color: "#999" }}> / month</span>
-            </div>
-          </div>
+        {/* Action feedback (shown once above the plan grid) */}
+        {actionData && "error" in actionData && actionData.error && (
+          <p style={{ color: "#cc0000", fontSize: "13px", marginBottom: "12px" }}>{actionData.error}</p>
+        )}
+        {actionData && "success" in actionData && actionData.success && (
+          <p style={{ color: "#28a745", fontSize: "13px", marginBottom: "12px" }}>{actionData.success}</p>
+        )}
 
-          <div style={{ borderTop: "1px solid #e8e8e8", paddingTop: "20px", marginBottom: "24px", display: "flex", flexDirection: "column", gap: "10px" }}>
-            {features.map((f, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#333" }}>
-                <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#111827", color: "#fff", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✓</span>
-                {f}
-              </div>
-            ))}
-          </div>
+        {/* Plan cards */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))",
+            gap: "16px",
+            marginBottom: "16px",
+            alignItems: "stretch",
+          }}
+        >
+          {PLANS.map((plan) => {
+            const isCurrent = currentPlanKey === plan.key;
+            // Label depends on whether the shop is already paying for the OTHER plan.
+            const switchLabel = plan.key === "premium" ? "Upgrade to Premium" : "Switch to Basic";
+            const buttonLabel = isActive ? switchLabel : `Subscribe — $${plan.price} / month`;
+            // Trial no longer blocks choosing a tier — only a missing Billing API does.
+            const disabled = billingUnavailable;
 
-          {actionData && "error" in actionData && actionData.error && (
-            <p style={{ color: "#cc0000", fontSize: "13px", marginBottom: "12px" }}>{actionData.error}</p>
-          )}
-          {actionData && "success" in actionData && actionData.success && (
-            <p style={{ color: "#28a745", fontSize: "13px", marginBottom: "12px" }}>{actionData.success}</p>
-          )}
-
-          {isActive ? (
-            <Form method="post">
-              <input type="hidden" name="intent" value="cancel" />
-              <button type="submit" style={{ ...btnStyle, background: "transparent", color: "#cc0000", border: "1px solid #cc0000" }}>
-                Cancel Subscription
-              </button>
-            </Form>
-          ) : (
-            <Form method="post">
-              <input type="hidden" name="intent" value="subscribe" />
-              <button
-                type="submit"
-                disabled={billingUnavailable || !trialExpired}
-                style={{ ...btnStyle, opacity: (billingUnavailable || !trialExpired) ? 0.4 : 1, cursor: (billingUnavailable || !trialExpired) ? "not-allowed" : "pointer" }}
+            return (
+              <div
+                key={plan.key}
+                style={{
+                  ...cardStyle,
+                  padding: "28px",
+                  display: "flex",
+                  flexDirection: "column",
+                  borderWidth: isCurrent ? "2px" : "1px",
+                  borderColor: isCurrent ? "#111827" : plan.highlight ? "#a5b4fc" : "#d7d7d7",
+                }}
               >
-                Subscribe — $3 / month
-              </button>
-              <p style={{ textAlign: "center", fontSize: "12px", color: "#888", margin: "10px 0 0 0" }}>
-                {billingUnavailable
-                  ? "Set app to public distribution first"
-                  : trialExpired
-                  ? "Your 14-day trial has ended"
-                  : `Available after your trial ends — ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} remaining`}
-              </p>
-            </Form>
-          )}
+                <div style={{ display: "flex", gap: "8px", marginBottom: "16px", minHeight: "24px" }}>
+                  {isCurrent && (
+                    <span style={{ display: "inline-block", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "11px", fontWeight: 700 }}>
+                      CURRENT PLAN
+                    </span>
+                  )}
+                  {!isCurrent && plan.highlight && (
+                    <span style={{ display: "inline-block", padding: "4px 12px", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "20px", color: "#4338ca", fontSize: "11px", fontWeight: 700 }}>
+                      MOST FLEXIBLE
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px", gap: "12px" }}>
+                  <div>
+                    <h2 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 750, color: "#111827" }}>{plan.name}</h2>
+                    <p style={{ ...mutedText, margin: 0 }}>{plan.tagline}</p>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <span style={{ fontSize: "34px", fontWeight: 800, color: "#000" }}>${plan.price}</span>
+                    <span style={{ fontSize: "13px", color: "#999" }}> / mo</span>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: "1px solid #e8e8e8", paddingTop: "18px", marginBottom: "22px", display: "flex", flexDirection: "column", gap: "10px", flex: 1 }}>
+                  {plan.features.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#333" }}>
+                      <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#111827", color: "#fff", fontSize: "11px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✓</span>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+
+                {isCurrent ? (
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="cancel" />
+                    <button type="submit" style={{ ...btnStyle, background: "transparent", color: "#cc0000", border: "1px solid #cc0000" }}>
+                      Cancel Subscription
+                    </button>
+                  </Form>
+                ) : (
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="subscribe" />
+                    <input type="hidden" name="plan" value={plan.key} />
+                    <button
+                      type="submit"
+                      disabled={disabled}
+                      style={{ ...btnStyle, opacity: disabled ? 0.4 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
+                    >
+                      {buttonLabel}
+                    </button>
+                    <p style={{ textAlign: "center", fontSize: "12px", color: "#888", margin: "10px 0 0 0" }}>
+                      {billingUnavailable
+                        ? "Set app to public distribution first"
+                        : isActive
+                        ? "Shopify swaps your plan and prorates the difference"
+                        : trialExpired
+                        ? "Your 14-day trial has ended"
+                        : `Full access during trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} left`}
+                    </p>
+                  </Form>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* FAQ */}

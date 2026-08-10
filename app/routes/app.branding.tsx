@@ -1,10 +1,10 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, useRouteError, useFetcher, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRouteError, useFetcher, Form } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { requireActiveSubscription } from "../services/billing.server";
+import { requireEntitlements, getEntitlements } from "../services/billing.server";
 import { fetchBranding, saveBranding, type FtcBranding } from "../utils/shopify-graphql";
 import {
   card,
@@ -18,15 +18,22 @@ import {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  await requireActiveSubscription(session.shop, request);
+  const { isPremium } = await requireEntitlements(session.shop, request);
+  // Branding is Premium-only. Keep `branding` present (empty) when locked so the
+  // component's hooks stay stable; the JSX renders an upgrade prompt instead.
+  if (!isPremium) return { locked: true as const, branding: {} as FtcBranding };
   const branding = await fetchBranding(admin);
-  return { branding };
+  return { locked: false as const, branding };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return { success: false, error: "Invalid method" };
 
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const { isPremium } = await getEntitlements(session.shop);
+  if (!isPremium) {
+    return { success: false, error: "Branding is a Premium feature. Upgrade to customize your bubble." };
+  }
 
   try {
     const formData = await request.formData();
@@ -49,9 +56,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BrandingPage() {
-  const { branding }  = useLoaderData<typeof loader>();
+  const { branding, locked } = useLoaderData<typeof loader>();
   const actionData    = useActionData<typeof action>();
   const navigation    = useNavigation();
+  const navigate      = useNavigate();
   const shopify       = useAppBridge();
   const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
 
@@ -162,6 +170,36 @@ export default function BrandingPage() {
     boxShadow: "0 6px 24px rgba(0,0,0,0.30)",
     flexShrink: 0,
   };
+
+  if (locked) {
+    return (
+      <s-page heading="Branding">
+        <div style={pageShell}>
+          <div
+            style={{
+              ...cardPadding,
+              textAlign: "center",
+              padding: "48px 32px",
+              background: "#eef2ff",
+              border: "1px solid #c7d2fe",
+            }}
+          >
+            <div style={{ fontSize: "40px", lineHeight: 1, marginBottom: "16px" }}>✨</div>
+            <h2 style={{ margin: "0 0 8px", fontSize: "22px", color: "#1e1b4b" }}>
+              Branding is a Premium feature
+            </h2>
+            <p style={{ margin: "0 auto 22px", maxWidth: "460px", color: "#3730a3", fontSize: "14px", lineHeight: 1.6 }}>
+              Upgrade to Premium ($10/month) to put your own logo in the flying bubble
+              and set a custom bubble background color.
+            </p>
+            <button type="button" style={primaryButton} onClick={() => navigate("/app/billing")}>
+              Upgrade to Premium
+            </button>
+          </div>
+        </div>
+      </s-page>
+    );
+  }
 
   return (
     <s-page heading="Branding">

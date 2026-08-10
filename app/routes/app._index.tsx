@@ -2,7 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { requireActiveSubscription } from "../services/billing.server";
+import { requireEntitlements } from "../services/billing.server";
 import { fetchConfigurations } from "../utils/shopify-graphql";
 import {
   badge,
@@ -17,10 +17,10 @@ import {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  await requireActiveSubscription(session.shop, request);
+  const { tier, isPremium, inTrial } = await requireEntitlements(session.shop, request);
   const configs = await fetchConfigurations(admin);
   const liveConfig = configs.find((config) => config.live) ?? null;
-  return { liveConfig, totalCount: configs.length, shop: session?.shop };
+  return { liveConfig, totalCount: configs.length, shop: session?.shop, tier, isPremium, inTrial };
 };
 
 const ANIMATION_NAMES: Record<string, string> = {
@@ -43,13 +43,29 @@ const SOUND_NAMES: Record<string, string> = {
   coin: "Coin",
   laser: "Laser",
   drum: "Drum",
+  custom: "Custom sound",
 };
 
+// A live config may be animation only, sound only, or both.
+function liveSummary(config: { animationKey: string; soundKey: string }) {
+  const animation = config.animationKey
+    ? (ANIMATION_NAMES[config.animationKey] ?? config.animationKey)
+    : null;
+  const sound = config.soundKey ? (SOUND_NAMES[config.soundKey] ?? config.soundKey) : null;
+
+  if (animation && sound) return `${animation} with ${sound}`;
+  if (animation) return `${animation} (no sound)`;
+  if (sound) return `${sound} (no animation)`;
+  return "An empty effect";
+}
+
 export default function Index() {
-  const { liveConfig, totalCount, shop } = useLoaderData<typeof loader>();
+  const { liveConfig, totalCount, shop, tier, isPremium, inTrial } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const hasConfigs = totalCount > 0;
   const isLive = Boolean(liveConfig);
+
+  const planLabel = inTrial ? "Trial — full access" : tier === "premium" ? "Premium plan" : "Basic plan";
 
   const API_KEY = "9620563a9ea6bc8e3f91ec87e893f4e8";
   const EMBED_HANDLE = "app_embed";
@@ -108,23 +124,34 @@ export default function Index() {
             }}
           >
             <div style={{ background: "#fff", padding: "24px" }}>
-              <div
-                style={{
-                  ...badge,
-                  background: isLive ? "#dcfce7" : "#fef3c7",
-                  border: isLive ? "1px solid #86efac" : "1px solid #fcd34d",
-                  color: isLive ? "#166534" : "#92400e",
-                  marginBottom: "14px",
-                }}
-              >
-                {isLive ? "Live on storefront" : "Setup in progress"}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+                <span
+                  style={{
+                    ...badge,
+                    background: isLive ? "#dcfce7" : "#fef3c7",
+                    border: isLive ? "1px solid #86efac" : "1px solid #fcd34d",
+                    color: isLive ? "#166534" : "#92400e",
+                  }}
+                >
+                  {isLive ? "Live on storefront" : "Setup in progress"}
+                </span>
+                <span
+                  style={{
+                    ...badge,
+                    background: isPremium ? "#eef2ff" : "#f3f4f6",
+                    border: isPremium ? "1px solid #c7d2fe" : "1px solid #e5e7eb",
+                    color: isPremium ? "#4338ca" : "#374151",
+                  }}
+                >
+                  {planLabel}
+                </span>
               </div>
               <h2 style={{ margin: "0 0 8px", fontSize: "24px", lineHeight: "1.2" }}>
                 {isLive ? "Your add-to-cart effect is active" : "Finish setup to launch your first effect"}
               </h2>
               <p style={{ ...mutedText, margin: "0 0 18px", maxWidth: "620px" }}>
                 {isLive && liveConfig
-                  ? `${ANIMATION_NAMES[liveConfig.animationKey]} with ${SOUND_NAMES[liveConfig.soundKey]} is currently selected for your storefront.`
+                  ? `${liveSummary(liveConfig)} is currently selected for your storefront.`
                   : hasConfigs
                     ? `You have ${totalCount} saved animation${totalCount === 1 ? "" : "s"}. Set one live, then enable the app embed.`
                     : "Create a polished animation and sound combo, set it live, and enable the app embed in your Shopify theme."}
@@ -218,6 +245,32 @@ export default function Index() {
             ))}
           </div>
         </div>
+
+        {!isPremium && (
+          <div
+            style={{
+              ...cardPadding,
+              marginBottom: "16px",
+              background: "#eef2ff",
+              border: "1px solid #c7d2fe",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h3 style={{ ...sectionTitle, color: "#1e1b4b" }}>Unlock Premium — $10/month</h3>
+              <p style={{ margin: 0, color: "#3730a3", fontSize: "13px", lineHeight: 1.5 }}>
+                Add animation-only and sound-only effects, plus custom logo and bubble color.
+              </p>
+            </div>
+            <button type="button" style={primaryButton} onClick={() => navigate("/app/billing")}>
+              Upgrade to Premium
+            </button>
+          </div>
+        )}
 
         <div
           style={{

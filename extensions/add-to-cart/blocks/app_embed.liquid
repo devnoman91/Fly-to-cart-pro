@@ -22,7 +22,11 @@
   {% endfor %}
 {% endif %}
 
-{% if ftc_branding_val != blank and ftc_branding_val.logoImageUrl != blank %}
+{% comment %}
+  A live config can be animation only, sound only, or both — so either key may be blank.
+  The logo is only ever drawn by an animation; skip the preload in sound-only mode.
+{% endcomment %}
+{% if animation_key != blank and ftc_branding_val != blank and ftc_branding_val.logoImageUrl != blank %}
   <link rel="preload" as="image" href="{{ ftc_branding_val.logoImageUrl }}">
 {% endif %}
 
@@ -36,8 +40,12 @@
         branding:       {{ ftc_branding_val | json | default: 'null' }}
       };
 
+      // Either key may be empty: animation only, sound only, or both.
+      var hasAnimation = !!FTC.animationKey;
+      var hasSound     = !!FTC.soundKey;
+
       // Preload logo so it's cached before the first animation runs
-      if (FTC.branding && FTC.branding.logoImageUrl) {
+      if (hasAnimation && FTC.branding && FTC.branding.logoImageUrl) {
         var _preload = new Image();
         _preload.src = FTC.branding.logoImageUrl;
       }
@@ -145,10 +153,12 @@
       }
 
       // Re-cache when the selected variant changes (e.g. colour/size swatch)
-      document.addEventListener('change', function(e) {
-        var inp = e.target;
-        if (inp && inp.name === 'id') _prefetchVariantImages();
-      });
+      if (hasAnimation) {
+        document.addEventListener('change', function(e) {
+          var inp = e.target;
+          if (inp && inp.name === 'id') _prefetchVariantImages();
+        });
+      }
 
       // Best-effort product image resolver called at animation time
       function _getProductImage(btn) {
@@ -207,11 +217,14 @@
         return null;
       }
 
-      // Kick off prefetch once DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', _prefetchVariantImages);
-      } else {
-        _prefetchVariantImages();
+      // Kick off prefetch once DOM is ready.
+      // Sound-only configs never draw a product image, so skip the whole fetch pass.
+      if (hasAnimation) {
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', _prefetchVariantImages);
+        } else {
+          _prefetchVariantImages();
+        }
       }
 
       var audioCtx = null;
@@ -829,11 +842,13 @@
                      || btn.getAttribute('name') === 'add';
         if (!isCartBtn) return;
 
+        // Sound-only puts nothing on screen, so the lock only needs to debounce
+        // double-fires — not to wait out a 1.5s flight to the cart.
         busy = true;
-        setTimeout(function() { busy = false; }, 1800);
+        setTimeout(function() { busy = false; }, hasAnimation ? 1800 : 350);
 
-        if (FTC.soundKey)     playSound(FTC.soundKey);
-        if (FTC.animationKey) _ensureImageThenAnimate(btn);
+        if (hasSound)     playSound(FTC.soundKey);
+        if (hasAnimation) _ensureImageThenAnimate(btn);
       });
     })();
   </script>

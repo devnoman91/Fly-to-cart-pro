@@ -8,9 +8,11 @@ import {
   useNavigation,
   useRouteError,
 } from "react-router";
+import { useEffect } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { requireActiveSubscription } from "../services/billing.server";
+import { requireActiveSubscription, getEntitlements } from "../services/billing.server";
 import {
   fetchConfigurations,
   saveConfigurations,
@@ -53,7 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: false, error: "Invalid method" };
   }
 
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const id = formData.get("id");
@@ -63,6 +65,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     let nextConfigs: FtcConfig[];
 
     if (intent === "set_live" && typeof id === "string") {
+      // A single-mode config (animation-only or sound-only) is a Premium effect.
+      // Block a Basic shop from setting one live — otherwise a config saved during
+      // trial could keep running Premium behavior on the storefront on the $5 plan.
+      const target = configs.find((c) => c.id === id);
+      const isSingleMode = target ? (!!target.animationKey) !== (!!target.soundKey) : false;
+      if (isSingleMode) {
+        const { isPremium } = await getEntitlements(session.shop);
+        if (!isPremium) {
+          return {
+            success: false,
+            error: "Animation-only and sound-only effects are Premium. Upgrade to set this one live.",
+          };
+        }
+      }
       nextConfigs = configs.map((config) => ({
         ...config,
         live: config.id === id,
@@ -82,12 +98,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
+// A config may be animation only, sound only, or both — either key can be "".
+const NO_ANIMATION = { name: "No animation", icon: "♪", color: "#64748b" };
+const NO_SOUND = { name: "No sound", icon: "—" };
+
 function getAnimation(key: string) {
+  if (!key) return NO_ANIMATION;
   return ANIMATIONS[key] ?? { name: key, icon: "?", color: "#111827" };
 }
 
 function getSound(key: string) {
+  if (!key) return NO_SOUND;
   return SOUNDS[key] ?? { name: key, icon: "?" };
+}
+
+// "Bounce + Chime", "Bounce" (silent), or "Chime" (no motion)
+function configLabel(config: { animationKey: string; soundKey: string }) {
+  const parts: string[] = [];
+  if (config.animationKey) parts.push(getAnimation(config.animationKey).name);
+  if (config.soundKey) parts.push(getSound(config.soundKey).name);
+  return parts.join(" + ") || "Empty";
+}
+
+function configMode(config: { animationKey: string; soundKey: string }) {
+  if (config.animationKey && config.soundKey) return "Animation + sound";
+  if (config.animationKey) return "Animation only";
+  if (config.soundKey) return "Sound only";
+  return "Nothing configured";
 }
 
 function ActionButton({
@@ -130,8 +167,17 @@ export default function AnimationsPage() {
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const shopify = useAppBridge();
   const isSubmitting = navigation.state === "submitting";
   const liveConfig = configs.find((config) => config.live);
+
+  // Surface action results (e.g. a blocked Premium set-live) as a toast.
+  useEffect(() => {
+    if (!actionData) return;
+    if (actionData.success === false && actionData.error) {
+      shopify.toast.show(actionData.error, { isError: true, duration: 5000 });
+    }
+  }, [actionData]);
 
   return (
     <s-page heading="My Animations">
@@ -171,9 +217,7 @@ export default function AnimationsPage() {
           <div style={{ ...card, padding: "16px" }}>
             <div style={{ ...mutedText, marginBottom: "6px" }}>Live animation</div>
             <div style={{ fontSize: "16px", fontWeight: 800, color: liveConfig ? "#111827" : "#6b7280" }}>
-              {liveConfig
-                ? `${getAnimation(liveConfig.animationKey).name} + ${getSound(liveConfig.soundKey).name}`
-                : "None active"}
+              {liveConfig ? configLabel(liveConfig) : "None active"}
             </div>
           </div>
         </div>
@@ -222,6 +266,8 @@ export default function AnimationsPage() {
             {configs.map((config, index) => {
               const animation = getAnimation(config.animationKey);
               const sound = getSound(config.soundKey);
+              // Sound-only configs have no animation glyph — show the sound's instead
+              const tileIcon = config.animationKey ? animation.icon : sound.icon;
 
               return (
                 <div
@@ -253,12 +299,12 @@ export default function AnimationsPage() {
                         flex: "0 0 auto",
                       }}
                     >
-                      {animation.icon}
+                      {tileIcon}
                     </div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <h2 style={{ margin: 0, fontSize: "17px", color: "#111827" }}>
-                          {animation.name} + {sound.name}
+                          {configLabel(config)}
                         </h2>
                         {config.live && (
                           <span
@@ -292,7 +338,12 @@ export default function AnimationsPage() {
                         )}
                       </div>
                       <div style={{ color: "#6b7280", fontSize: "13px", marginTop: "6px" }}>
-                        Animation #{index + 1} · Sound {sound.icon} {sound.name}
+                        Effect #{index + 1} · {configMode(config)}
+                        {config.soundKey && (
+                          <span style={{ marginLeft: "6px" }}>
+                            · Sound {sound.icon} {sound.name}
+                          </span>
+                        )}
                         {config.customSoundUrl && (
                           <span style={{ marginLeft: "6px", color: "#9ca3af" }}>
                             · Uploaded file

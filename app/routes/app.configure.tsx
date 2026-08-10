@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { requireActiveSubscription } from "../services/billing.server";
+import { requireEntitlements, getEntitlements } from "../services/billing.server";
 import { fetchConfigurations, saveConfigurations, type FtcConfig } from "../utils/shopify-graphql";
 import {
   card,
@@ -57,25 +57,57 @@ const stepCardStyle: React.CSSProperties = {
   marginBottom: "16px",
 };
 
+const optionalTagStyle: React.CSSProperties = {
+  background: "#f3f4f6",
+  border: "1px solid #e5e7eb",
+  borderRadius: "999px",
+  color: "#6b7280",
+  fontSize: "11px",
+  fontWeight: 700,
+  marginLeft: "8px",
+  padding: "3px 8px",
+  verticalAlign: "middle",
+};
+
+const clearButtonStyle: React.CSSProperties = {
+  ...secondaryButton,
+  fontSize: "12px",
+  minHeight: "30px",
+  padding: "0 10px",
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  await requireActiveSubscription(session.shop, request);
+  const { isPremium } = await requireEntitlements(session.shop, request);
   const configs = await fetchConfigurations(admin);
-  return { configs };
+  return { configs, isPremium };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return { success: false, error: "Invalid method" };
 
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const { isPremium } = await getEntitlements(session.shop);
 
   try {
     const formData = await request.formData();
-    const animationKey  = formData.get("animationKey") as string;
-    const soundKey      = formData.get("soundKey") as string;
+    // Either key may be "" — a config can be animation only, sound only, or both.
+    const animationKey  = (formData.get("animationKey") as string) || "";
+    const soundKey      = (formData.get("soundKey") as string) || "";
     const customSoundUrl = (formData.get("customSoundUrl") as string) || undefined;
 
-    if (!animationKey || !soundKey) return { success: false, error: "Select both animation and sound" };
+    if (!animationKey && !soundKey) {
+      return { success: false, error: "Select an animation, a sound, or both" };
+    }
+
+    // Single-mode (exactly one of the two) is a Premium feature. Basic must pick both.
+    const singleMode = (!!animationKey) !== (!!soundKey);
+    if (singleMode && !isPremium) {
+      return {
+        success: false,
+        error: "Animation-only and sound-only effects require the Premium plan. Pick both, or upgrade.",
+      };
+    }
 
     if (soundKey === "custom" && !customSoundUrl) {
       return { success: false, error: "Upload a custom sound file before saving" };
@@ -99,7 +131,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ConfigurePage() {
-  useLoaderData<typeof loader>();
+  const { isPremium } = useLoaderData<typeof loader>();
   const actionData  = useActionData<typeof action>();
   const navigation  = useNavigation();
   const shopify     = useAppBridge();
@@ -133,7 +165,7 @@ export default function ConfigurePage() {
   useEffect(() => {
     if (!actionData) return;
     if (actionData.success) {
-      shopify.toast.show("Animation added! Go to My Animations to set it live.", { duration: 4000 });
+      shopify.toast.show("Saved! Go to My Animations to set it live.", { duration: 4000 });
     } else if (actionData.success === false && actionData.error) {
       shopify.toast.show(actionData.error, { isError: true, duration: 5000 });
     }
@@ -153,11 +185,22 @@ export default function ConfigurePage() {
     });
   };
 
-  const canAdd = Boolean(
-    selectedAnimation &&
-    selectedSound &&
-    (selectedSound !== "custom" || customSoundUrl),
-  );
+  // Custom sound additionally needs its upload finished before saving.
+  const customSoundReady = selectedSound !== "custom" || Boolean(customSoundUrl);
+  // Premium: at least one of the two. Basic: single-mode is locked, so both are required.
+  const hasSelection = isPremium
+    ? Boolean(selectedAnimation || selectedSound)
+    : Boolean(selectedAnimation && selectedSound);
+  const canAdd = hasSelection && customSoundReady;
+
+  const modeLabel =
+    selectedAnimation && selectedSound
+      ? "Animation + sound"
+      : selectedAnimation
+        ? "Animation only"
+        : selectedSound
+          ? "Sound only"
+          : "Nothing selected";
 
   const playSound = (soundKey: string) => {
     if (soundKey === "custom") {
@@ -305,10 +348,10 @@ export default function ConfigurePage() {
   };
 
   const handlePreview = () => {
-    if (!selectedAnimation || !selectedSound) return;
+    if (!canAdd) return;
     setIsPlaying(true);
-    playSound(selectedSound);
-    runPreviewAnimation(selectedAnimation);
+    if (selectedSound) playSound(selectedSound);
+    if (selectedAnimation) runPreviewAnimation(selectedAnimation);
     setTimeout(() => setIsPlaying(false), 1400);
   };
 
@@ -331,16 +374,18 @@ export default function ConfigurePage() {
               Build an add-to-cart effect
             </h2>
             <p style={{ ...mutedText, margin: 0, maxWidth: "640px" }}>
-              Choose one animation and one sound, preview the result, then save it to My Animations.
+              {isPremium
+                ? "Pick an animation, a sound, or both — preview the result, then save it to My Animations."
+                : "Pick an animation and a sound, preview the result, then save it to My Animations."}
             </p>
           </div>
           <div
             style={{
               alignItems: "center",
-              background: "#f3f4f6",
-              border: "1px solid #e5e7eb",
+              background: canAdd ? "#111827" : "#f3f4f6",
+              border: canAdd ? "1px solid #111827" : "1px solid #e5e7eb",
               borderRadius: "999px",
-              color: "#374151",
+              color: canAdd ? "#fff" : "#374151",
               display: "inline-flex",
               fontSize: "12px",
               fontWeight: 800,
@@ -348,15 +393,53 @@ export default function ConfigurePage() {
               padding: "0 12px",
             }}
           >
-            {(selectedAnimation ? 1 : 0) + (selectedSound ? 1 : 0)}/2 selected
+            {modeLabel}
           </div>
         </div>
       </div>
 
+      {!isPremium && (
+        <div
+          style={{
+            ...cardPadding,
+            marginBottom: "16px",
+            background: "#eef2ff",
+            border: "1px solid #c7d2fe",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ fontSize: "13px", color: "#3730a3", lineHeight: 1.5 }}>
+            <strong>Premium unlocks single-mode effects.</strong> On your plan, save an
+            animation <em>and</em> a sound together. Upgrade for animation-only or sound-only.
+          </div>
+          <button type="button" style={{ ...primaryButton, minHeight: "34px" }} onClick={() => navigate("/app/billing")}>
+            Upgrade to Premium
+          </button>
+        </div>
+      )}
+
       <section style={stepCardStyle}>
-        <div style={{ marginBottom: "16px" }}>
-          <h2 style={sectionTitle}>Step 1: Choose animation</h2>
-          <p style={{ ...mutedText, margin: 0 }}>Pick the motion customers will see after clicking Add to cart.</p>
+        <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={sectionTitle}>
+              Step 1: Choose animation{" "}
+              {isPremium && <span style={optionalTagStyle}>Optional</span>}
+            </h2>
+            <p style={{ ...mutedText, margin: 0 }}>
+              {isPremium
+                ? "Pick the motion customers will see after clicking Add to cart, or skip it for a sound-only effect."
+                : "Pick the motion customers will see after clicking Add to cart."}
+            </p>
+          </div>
+          {isPremium && selectedAnimation && (
+            <button type="button" onClick={() => setSelectedAnimation(null)} style={clearButtonStyle}>
+              Clear animation
+            </button>
+          )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "12px" }}>
             {ANIMATIONS.map((anim) => {
@@ -365,7 +448,7 @@ export default function ConfigurePage() {
                 <button
                   type="button"
                   key={anim.key}
-                  onClick={() => setSelectedAnimation(anim.key)}
+                  onClick={() => setSelectedAnimation(active ? null : anim.key)}
                   style={optionCardStyle(active)}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
@@ -385,9 +468,32 @@ export default function ConfigurePage() {
       </section>
 
       <section style={stepCardStyle}>
-        <div style={{ marginBottom: "16px" }}>
-          <h2 style={sectionTitle}>Step 2: Choose sound</h2>
-          <p style={{ ...mutedText, margin: 0 }}>Select the audio cue that plays with the animation.</p>
+        <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={sectionTitle}>
+              Step 2: Choose sound{" "}
+              {isPremium && <span style={optionalTagStyle}>Optional</span>}
+            </h2>
+            <p style={{ ...mutedText, margin: 0 }}>
+              {isPremium
+                ? "Select the audio cue, or skip it for an animation-only effect."
+                : "Select the audio cue that plays with the animation."}
+            </p>
+          </div>
+          {isPremium && selectedSound && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedSound(null);
+                setCustomSoundUrl(null);
+                setCustomFileName("");
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+              style={clearButtonStyle}
+            >
+              Clear sound
+            </button>
+          )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: "12px" }}>
             {SOUNDS.map((snd) => {
@@ -396,7 +502,11 @@ export default function ConfigurePage() {
                 <button
                   type="button"
                   key={snd.key}
-                  onClick={() => { setSelectedSound(snd.key); playSound(snd.key); }}
+                  onClick={() => {
+                    if (active) { setSelectedSound(null); return; }
+                    setSelectedSound(snd.key);
+                    playSound(snd.key);
+                  }}
                   style={optionCardStyle(active)}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
@@ -419,7 +529,7 @@ export default function ConfigurePage() {
               return (
                 <button
                   type="button"
-                  onClick={() => setSelectedSound("custom")}
+                  onClick={() => setSelectedSound(active ? null : "custom")}
                   style={{
                     ...optionCardStyle(active),
                     minHeight: "142px",
@@ -572,7 +682,9 @@ export default function ConfigurePage() {
               ? "Preview the final add-to-cart experience, then save it to your animation list."
               : selectedSound === "custom" && !customSoundUrl
                 ? "Upload a sound file to enable preview and save."
-                : "Choose one animation and one sound to enable preview and save."}
+                : isPremium
+                  ? "Select an animation, a sound, or both to enable preview and save."
+                  : "Select an animation and a sound to enable preview and save."}
           </p>
         </div>
             <div
@@ -657,10 +769,22 @@ export default function ConfigurePage() {
                   </div>
                 </div>
                 <div style={{ marginTop: "14px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                  {!canAdd ? "Select animation and sound" : isPlaying ? "Preview playing" : "Preview animation"}
+                  {!canAdd
+                    ? isPremium ? "Select an animation or a sound" : "Select an animation and a sound"
+                    : isPlaying
+                      ? "Preview playing"
+                      : selectedAnimation
+                        ? "Preview animation"
+                        : "Preview sound"}
                 </div>
                 <div style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
-                  {canAdd ? "Plays with the selected sound" : "Preview button unlocks after both choices"}
+                  {!canAdd
+                    ? isPremium ? "Preview unlocks once you pick at least one" : "Preview unlocks once both are picked"
+                    : selectedAnimation && selectedSound
+                      ? "Plays the animation with the selected sound"
+                      : selectedAnimation
+                        ? "Plays the animation with no sound"
+                        : "Plays the sound with no animation"}
                 </div>
               </button>
 
@@ -682,19 +806,21 @@ export default function ConfigurePage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px", marginBottom: "16px" }}>
                     <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
                       <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedAnimationOption?.emoji ?? "—"}</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>{selectedAnimationOption?.name ?? "Choose animation"}</div>
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: selectedAnimationOption ? "#111827" : "#9ca3af" }}>
+                        {selectedAnimationOption?.name ?? "No animation"}
+                      </div>
                       <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Animation</div>
                     </div>
                     <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
                       <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedSoundOption?.emoji ?? "—"}</div>
-                      <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {selectedSoundOption?.name ?? "Choose sound"}
+                      <div style={{ fontSize: "14px", fontWeight: 700, color: selectedSoundOption ? "#111827" : "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {selectedSoundOption?.name ?? "No sound"}
                       </div>
                       <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Sound</div>
                     </div>
                   </div>
                   <p style={{ margin: 0, fontSize: "13px", color: "#4b5563", lineHeight: "1.5" }}>
-                    Save this pair to My Animations, then choose which saved animation is live on the storefront.
+                    Save this to My Animations, then choose which saved effect is live on the storefront.
                   </p>
                 </div>
 
