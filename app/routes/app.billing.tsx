@@ -4,6 +4,8 @@ import { Form, useLoaderData, useActionData, useRouteError, redirect } from "rea
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getCurrentPlan, requestPlan, cancelPlan } from "../services/billing.server";
+import { getServerT } from "../i18n";
+import { useT } from "../i18n/context";
 import { card, mutedText, narrowPageShell, sectionTitle } from "../styles/ui";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -27,6 +29,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") return null;
+  const t = getServerT(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -37,18 +40,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch (err: unknown) {
       if (err instanceof Response) throw err;
       if (getErrorMessage(err, "") === "BILLING_UNAVAILABLE") {
-        return { error: "Billing is not available yet. Set your app to Public distribution in the Shopify Partner Dashboard first." };
+        return { error: t("billing.error.unavailable") };
       }
-      return { error: getErrorMessage(err, "Failed to start subscription.") };
+      return { error: getErrorMessage(err, t("billing.error.subscribeFailed")) };
     }
   }
 
   if (intent === "cancel") {
     try {
       await cancelPlan(request);
-      return { success: "Subscription cancelled." };
+      return { success: t("billing.success.cancelled") };
     } catch (err: unknown) {
-      return { error: getErrorMessage(err, "Failed to cancel.") };
+      return { error: getErrorMessage(err, t("billing.error.cancelFailed")) };
     }
   }
 
@@ -64,42 +67,36 @@ type PlanCard = {
   highlight?: boolean;
 };
 
-const PLANS: PlanCard[] = [
-  {
-    key: "pro", // matches PLAN_BASIC — do not change
-    name: "Basic",
-    price: 5,
-    tagline: "An animation and a sound together on every add to cart.",
-    features: [
-      "All 8 animation styles",
-      "All 8 sound effects",
-      "Animation + sound together",
-      "Unlimited saved effects",
-      "One-click live / stop toggle",
-      "App embed for any theme",
-    ],
-  },
-  {
-    key: "premium", // matches PLAN_PREMIUM
-    name: "Premium",
-    price: 10,
-    tagline: "Everything in Basic, plus flexible effects and custom branding.",
-    features: [
-      "Everything in Basic",
-      "Animation-only effects",
-      "Sound-only effects",
-      "Custom logo in the flying bubble",
-      "Custom bubble background color",
-      "Priority support",
-    ],
-    highlight: true,
-  },
-];
-
 export default function BillingPage() {
   const { subscription, trialEndsAt, trialExpired } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const t = useT();
   const [expandedFaq, setExpandedFaq] = React.useState<number | null>(null);
+
+  // Plan keys/prices stay fixed; names, taglines and features are translated.
+  const PLANS: PlanCard[] = [
+    {
+      key: "pro", // matches PLAN_BASIC — do not change
+      name: t("billing.basic.name"),
+      price: 5,
+      tagline: t("billing.basic.tagline"),
+      features: [
+        t("billing.basic.f1"), t("billing.basic.f2"), t("billing.basic.f3"),
+        t("billing.basic.f4"), t("billing.basic.f5"), t("billing.basic.f6"),
+      ],
+    },
+    {
+      key: "premium", // matches PLAN_PREMIUM
+      name: t("billing.premium.name"),
+      price: 10,
+      tagline: t("billing.premium.tagline"),
+      features: [
+        t("billing.premium.f1"), t("billing.premium.f2"), t("billing.premium.f3"),
+        t("billing.premium.f4"), t("billing.premium.f5"), t("billing.premium.f6"),
+      ],
+      highlight: true,
+    },
+  ];
 
   const isActive = subscription?.status === "active" || subscription?.status === "pending";
   const billingUnavailable = subscription?.billingUnavailable === true;
@@ -116,22 +113,10 @@ export default function BillingPage() {
   const currentPlanKey = isActive ? subscription?.planName ?? null : null;
 
   const faqs = [
-    {
-      q: "How does the 14-day free trial work?",
-      a: "You get full Premium access for 14 days from the moment you install — no card required, nothing to click. Before it ends, pick the plan that fits your store.",
-    },
-    {
-      q: "What's the difference between Basic and Premium?",
-      a: "Basic ($5/mo) plays an animation and a sound together on add to cart. Premium ($10/mo) adds animation-only and sound-only effects plus custom branding — your logo in the flying bubble and a custom bubble color.",
-    },
-    {
-      q: "Can I switch plans later?",
-      a: "Yes. Upgrade or downgrade any time from this page — Shopify swaps the subscription and prorates the difference automatically.",
-    },
-    {
-      q: "What happens if I uninstall the app?",
-      a: "Your subscription is cancelled automatically. All animation data stored in your shop metafields is cleaned up within 30 days.",
-    },
+    { q: t("billing.faq.q1"), a: t("billing.faq.a1") },
+    { q: t("billing.faq.q2"), a: t("billing.faq.a2") },
+    { q: t("billing.faq.q3"), a: t("billing.faq.a3") },
+    { q: t("billing.faq.q4"), a: t("billing.faq.a4") },
   ];
 
   const cardStyle: React.CSSProperties = {
@@ -152,17 +137,16 @@ export default function BillingPage() {
   };
 
   return (
-    <s-page heading="Billing">
+    <s-page heading={t("billing.pageHeading")}>
       <div style={narrowPageShell}>
 
         {/* Header */}
         <div style={{ marginBottom: "18px" }}>
           <h1 style={{ fontSize: "24px", fontWeight: 750, color: "#111827", margin: "0 0 6px" }}>
-            Fly to Cart Pro
+            {t("billing.header.title")}
           </h1>
           <p style={{ ...mutedText, margin: 0 }}>
-            Two plans. Start at $5&nbsp;/&nbsp;month, or unlock single-mode effects and
-            branding with Premium at $10&nbsp;/&nbsp;month.
+            {t("billing.header.desc")}
           </p>
         </div>
 
@@ -192,27 +176,29 @@ export default function BillingPage() {
               {isActive ? (
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>
-                    {currentPlanKey === "premium" ? "Premium plan active" : "Basic plan active"}
+                    {currentPlanKey === "premium" ? t("billing.trial.activeTitlePremium") : t("billing.trial.activeTitleBasic")}
                   </h3>
                   <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
                     {subscription?.billingOn
-                      ? `Next billing: ${formatDate(subscription.billingOn)}`
-                      : "Active through Shopify."}
+                      ? t("billing.trial.nextBilling", { date: formatDate(subscription.billingOn) ?? "" })
+                      : t("billing.trial.activeThrough")}
                   </p>
                 </div>
               ) : (
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 700 }}>
-                    Free trial — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} remaining
+                    {trialDaysLeft === 1
+                      ? t("billing.trial.remainingOne")
+                      : t("billing.trial.remainingMany", { days: trialDaysLeft ?? 0 })}
                   </h3>
                   <p style={{ margin: 0, fontSize: "13px", color: "#666" }}>
-                    Trial ends: {formatDate(trialEndsAt)}
+                    {t("billing.trial.ends", { date: formatDate(trialEndsAt) ?? "" })}
                   </p>
                 </div>
               )}
               <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "12px", fontWeight: 600 }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#28a745", display: "inline-block" }} />
-                {isActive ? "Active" : "Trial"}
+                {isActive ? t("billing.badge.active") : t("billing.badge.trial")}
               </div>
             </div>
             {!isActive && trialDaysLeft !== null && trialDaysLeft > 0 && (
@@ -244,8 +230,8 @@ export default function BillingPage() {
           {PLANS.map((plan) => {
             const isCurrent = currentPlanKey === plan.key;
             // Label depends on whether the shop is already paying for the OTHER plan.
-            const switchLabel = plan.key === "premium" ? "Upgrade to Premium" : "Switch to Basic";
-            const buttonLabel = isActive ? switchLabel : `Subscribe — $${plan.price} / month`;
+            const switchLabel = plan.key === "premium" ? t("billing.btn.upgradePremium") : t("billing.btn.switchBasic");
+            const buttonLabel = isActive ? switchLabel : t("billing.btn.subscribe", { price: plan.price });
             // Trial no longer blocks choosing a tier — only a missing Billing API does.
             const disabled = billingUnavailable;
 
@@ -264,12 +250,12 @@ export default function BillingPage() {
                 <div style={{ display: "flex", gap: "8px", marginBottom: "16px", minHeight: "24px" }}>
                   {isCurrent && (
                     <span style={{ display: "inline-block", padding: "4px 12px", background: "#111827", borderRadius: "20px", color: "#fff", fontSize: "11px", fontWeight: 700 }}>
-                      CURRENT PLAN
+                      {t("billing.card.current")}
                     </span>
                   )}
                   {!isCurrent && plan.highlight && (
                     <span style={{ display: "inline-block", padding: "4px 12px", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: "20px", color: "#4338ca", fontSize: "11px", fontWeight: 700 }}>
-                      MOST FLEXIBLE
+                      {t("billing.card.flexible")}
                     </span>
                   )}
                 </div>
@@ -281,7 +267,7 @@ export default function BillingPage() {
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <span style={{ fontSize: "34px", fontWeight: 800, color: "#000" }}>${plan.price}</span>
-                    <span style={{ fontSize: "13px", color: "#999" }}> / mo</span>
+                    <span style={{ fontSize: "13px", color: "#999" }}> {t("billing.card.perMonth")}</span>
                   </div>
                 </div>
 
@@ -298,7 +284,7 @@ export default function BillingPage() {
                   <Form method="post">
                     <input type="hidden" name="intent" value="cancel" />
                     <button type="submit" style={{ ...btnStyle, background: "transparent", color: "#cc0000", border: "1px solid #cc0000" }}>
-                      Cancel Subscription
+                      {t("billing.btn.cancel")}
                     </button>
                   </Form>
                 ) : (
@@ -314,12 +300,14 @@ export default function BillingPage() {
                     </button>
                     <p style={{ textAlign: "center", fontSize: "12px", color: "#888", margin: "10px 0 0 0" }}>
                       {billingUnavailable
-                        ? "Set app to public distribution first"
+                        ? t("billing.subnote.publicFirst")
                         : isActive
-                        ? "Shopify swaps your plan and prorates the difference"
+                        ? t("billing.subnote.swaps")
                         : trialExpired
-                        ? "Your 14-day trial has ended"
-                        : `Full access during trial — ${trialDaysLeft} day${trialDaysLeft !== 1 ? "s" : ""} left`}
+                        ? t("billing.subnote.trialEnded")
+                        : trialDaysLeft === 1
+                        ? t("billing.subnote.trialLeftOne")
+                        : t("billing.subnote.trialLeftMany", { days: trialDaysLeft ?? 0 })}
                     </p>
                   </Form>
                 )}
@@ -331,7 +319,7 @@ export default function BillingPage() {
         {/* FAQ */}
         <div style={cardStyle}>
           <h3 style={sectionTitle}>
-            Frequently Asked Questions
+            {t("billing.faq.title")}
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
             {faqs.map((faq, i) => (
@@ -352,7 +340,7 @@ export default function BillingPage() {
         </div>
 
         <p style={{ textAlign: "center", marginTop: "20px", color: "#9ca3af", fontSize: "12px" }}>
-          All charges billed in USD via Shopify. Cancel any time.
+          {t("billing.footer")}
         </p>
       </div>
     </s-page>

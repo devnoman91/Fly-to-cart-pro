@@ -5,6 +5,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireEntitlements, getEntitlements } from "../services/billing.server";
+import { getServerT, type MessageKey } from "../i18n";
+import { useT } from "../i18n/context";
 import { fetchConfigurations, saveConfigurations, type FtcConfig } from "../utils/shopify-graphql";
 import {
   card,
@@ -16,26 +18,27 @@ import {
   sectionTitle,
 } from "../styles/ui";
 
-const ANIMATIONS = [
-  { key: "slide_in", name: "Slide In",  desc: "Product slides smoothly to cart",       emoji: "➡️"  },
-  { key: "bounce",   name: "Bounce",    desc: "Product bounces elastically to cart",    emoji: "🏀"  },
-  { key: "flip",     name: "Flip",      desc: "Product rotates 360° while flying",      emoji: "🔄"  },
-  { key: "pulse",    name: "Pulse",     desc: "Cart icon pulses when item is added",    emoji: "💫"  },
-  { key: "spiral",   name: "Spiral",    desc: "Product spirals upward to cart",         emoji: "🌀"  },
-  { key: "zoom",     name: "Zoom",      desc: "Product zooms in then flies to cart",    emoji: "🔎"  },
-  { key: "shake",    name: "Shake",     desc: "Product shakes then shoots to cart",     emoji: "📳"  },
-  { key: "float",    name: "Float",     desc: "Product floats gently with a glow trail", emoji: "🎈" },
+// Effect names stay in English; `descKey` points at the translated description.
+const ANIMATIONS: { key: string; name: string; descKey: MessageKey; emoji: string }[] = [
+  { key: "slide_in", name: "Slide In",  descKey: "config.animDesc.slide_in", emoji: "➡️"  },
+  { key: "bounce",   name: "Bounce",    descKey: "config.animDesc.bounce",   emoji: "🏀"  },
+  { key: "flip",     name: "Flip",      descKey: "config.animDesc.flip",     emoji: "🔄"  },
+  { key: "pulse",    name: "Pulse",     descKey: "config.animDesc.pulse",    emoji: "💫"  },
+  { key: "spiral",   name: "Spiral",    descKey: "config.animDesc.spiral",   emoji: "🌀"  },
+  { key: "zoom",     name: "Zoom",      descKey: "config.animDesc.zoom",     emoji: "🔎"  },
+  { key: "shake",    name: "Shake",     descKey: "config.animDesc.shake",    emoji: "📳"  },
+  { key: "float",    name: "Float",     descKey: "config.animDesc.float",    emoji: "🎈" },
 ];
 
-const SOUNDS = [
-  { key: "chime",   name: "Chime",   desc: "Pleasant notification chime",   emoji: "🔔" },
-  { key: "whoosh",  name: "Whoosh",  desc: "Smooth swoosh transition",      emoji: "💨" },
-  { key: "pop",     name: "Pop",     desc: "Playful bubble pop",            emoji: "🫧" },
-  { key: "bell",    name: "Bell",    desc: "Classic ringing bell",          emoji: "🛎️" },
-  { key: "sparkle", name: "Sparkle", desc: "Magical tinkling effect",       emoji: "✨" },
-  { key: "coin",    name: "Coin",    desc: "Coin jingle cash register",     emoji: "🪙" },
-  { key: "laser",   name: "Laser",   desc: "Sci-fi laser zap effect",       emoji: "⚡" },
-  { key: "drum",    name: "Drum",    desc: "Deep bass drum hit",            emoji: "🥁" },
+const SOUNDS: { key: string; name: string; descKey: MessageKey; emoji: string }[] = [
+  { key: "chime",   name: "Chime",   descKey: "config.soundDesc.chime",   emoji: "🔔" },
+  { key: "whoosh",  name: "Whoosh",  descKey: "config.soundDesc.whoosh",  emoji: "💨" },
+  { key: "pop",     name: "Pop",     descKey: "config.soundDesc.pop",     emoji: "🫧" },
+  { key: "bell",    name: "Bell",    descKey: "config.soundDesc.bell",    emoji: "🛎️" },
+  { key: "sparkle", name: "Sparkle", descKey: "config.soundDesc.sparkle", emoji: "✨" },
+  { key: "coin",    name: "Coin",    descKey: "config.soundDesc.coin",    emoji: "🪙" },
+  { key: "laser",   name: "Laser",   descKey: "config.soundDesc.laser",   emoji: "⚡" },
+  { key: "drum",    name: "Drum",    descKey: "config.soundDesc.drum",    emoji: "🥁" },
 ];
 
 const optionCardStyle = (active: boolean): React.CSSProperties => ({
@@ -84,7 +87,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  if (request.method !== "POST") return { success: false, error: "Invalid method" };
+  const t = getServerT(request);
+  if (request.method !== "POST") return { success: false, error: t("config.error.invalidMethod") };
 
   const { admin, session } = await authenticate.admin(request);
   const { isPremium } = await getEntitlements(session.shop);
@@ -97,20 +101,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const customSoundUrl = (formData.get("customSoundUrl") as string) || undefined;
 
     if (!animationKey && !soundKey) {
-      return { success: false, error: "Select an animation, a sound, or both" };
+      return { success: false, error: t("config.error.selectOne") };
     }
 
     // Single-mode (exactly one of the two) is a Premium feature. Basic must pick both.
     const singleMode = (!!animationKey) !== (!!soundKey);
     if (singleMode && !isPremium) {
-      return {
-        success: false,
-        error: "Animation-only and sound-only effects require the Premium plan. Pick both, or upgrade.",
-      };
+      return { success: false, error: t("config.error.premiumSingle") };
     }
 
     if (soundKey === "custom" && !customSoundUrl) {
-      return { success: false, error: "Upload a custom sound file before saving" };
+      return { success: false, error: t("config.error.customUpload") };
     }
 
     const configs = await fetchConfigurations(admin);
@@ -126,7 +127,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: true, error: null };
   } catch (err: any) {
     console.error("[FlyToCart] Add failed:", err?.message);
-    return { success: false, error: err?.message || "Failed to save" };
+    return { success: false, error: err?.message || t("config.error.saveFailed") };
   }
 };
 
@@ -136,6 +137,7 @@ export default function ConfigurePage() {
   const navigation  = useNavigation();
   const shopify     = useAppBridge();
   const navigate    = useNavigate();
+  const t           = useT();
   const isSaving    = navigation.state === "submitting";
 
   const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
@@ -165,7 +167,7 @@ export default function ConfigurePage() {
   useEffect(() => {
     if (!actionData) return;
     if (actionData.success) {
-      shopify.toast.show("Saved! Go to My Animations to set it live.", { duration: 4000 });
+      shopify.toast.show(t("config.toast.saved"), { duration: 4000 });
     } else if (actionData.success === false && actionData.error) {
       shopify.toast.show(actionData.error, { isError: true, duration: 5000 });
     }
@@ -195,12 +197,12 @@ export default function ConfigurePage() {
 
   const modeLabel =
     selectedAnimation && selectedSound
-      ? "Animation + sound"
+      ? t("config.mode.both")
       : selectedAnimation
-        ? "Animation only"
+        ? t("config.mode.animationOnly")
         : selectedSound
-          ? "Sound only"
-          : "Nothing selected";
+          ? t("config.mode.soundOnly")
+          : t("config.mode.none");
 
   const playSound = (soundKey: string) => {
     if (soundKey === "custom") {
@@ -357,13 +359,13 @@ export default function ConfigurePage() {
 
   const selectedAnimationOption = ANIMATIONS.find((a) => a.key === selectedAnimation);
   const selectedSoundOption = selectedSound === "custom"
-    ? { name: customFileName ? `Custom: ${customFileName}` : "Custom Sound", emoji: "🎵" }
+    ? { name: customFileName ? t("config.customSoundName", { name: customFileName }) : t("config.customSoundDefault"), emoji: "🎵" }
     : SOUNDS.find((s) => s.key === selectedSound);
 
   return (
-    <s-page heading="Configure Animation">
+    <s-page heading={t("config.pageHeading")}>
       <s-button slot="primary-action" onClick={() => navigate("/app/animations")} variant="secondary">
-        My Animations
+        {t("config.myAnimations")}
       </s-button>
 
       <div style={pageShell}>
@@ -371,12 +373,10 @@ export default function ConfigurePage() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
           <div>
             <h2 style={{ margin: "0 0 6px", color: "#111827", fontSize: "22px", lineHeight: "1.2" }}>
-              Build an add-to-cart effect
+              {t("config.build.title")}
             </h2>
             <p style={{ ...mutedText, margin: 0, maxWidth: "640px" }}>
-              {isPremium
-                ? "Pick an animation, a sound, or both — preview the result, then save it to My Animations."
-                : "Pick an animation and a sound, preview the result, then save it to My Animations."}
+              {isPremium ? t("config.build.descPremium") : t("config.build.descBasic")}
             </p>
           </div>
           <div
@@ -413,11 +413,10 @@ export default function ConfigurePage() {
           }}
         >
           <div style={{ fontSize: "13px", color: "#3730a3", lineHeight: 1.5 }}>
-            <strong>Premium unlocks single-mode effects.</strong> On your plan, save an
-            animation <em>and</em> a sound together. Upgrade for animation-only or sound-only.
+            <strong>{t("config.upgrade.bold")}</strong> {t("config.upgrade.body")}
           </div>
           <button type="button" style={{ ...primaryButton, minHeight: "34px" }} onClick={() => navigate("/app/billing")}>
-            Upgrade to Premium
+            {t("config.upgrade.cta")}
           </button>
         </div>
       )}
@@ -426,18 +425,16 @@ export default function ConfigurePage() {
         <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div>
             <h2 style={sectionTitle}>
-              Step 1: Choose animation{" "}
-              {isPremium && <span style={optionalTagStyle}>Optional</span>}
+              {t("config.step1.title")}{" "}
+              {isPremium && <span style={optionalTagStyle}>{t("config.optional")}</span>}
             </h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              {isPremium
-                ? "Pick the motion customers will see after clicking Add to cart, or skip it for a sound-only effect."
-                : "Pick the motion customers will see after clicking Add to cart."}
+              {isPremium ? t("config.step1.descPremium") : t("config.step1.descBasic")}
             </p>
           </div>
           {isPremium && selectedAnimation && (
             <button type="button" onClick={() => setSelectedAnimation(null)} style={clearButtonStyle}>
-              Clear animation
+              {t("config.clearAnimation")}
             </button>
           )}
         </div>
@@ -455,12 +452,12 @@ export default function ConfigurePage() {
                     <div style={{ fontSize: "28px", lineHeight: 1 }}>{anim.emoji}</div>
                     {active && (
                       <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
-                        Selected
+                        {t("config.selected")}
                       </span>
                     )}
                   </div>
                   <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{anim.name}</div>
-                  <div style={{ ...mutedText, marginTop: "5px" }}>{anim.desc}</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>{t(anim.descKey)}</div>
                 </button>
               );
             })}
@@ -471,13 +468,11 @@ export default function ConfigurePage() {
         <div style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div>
             <h2 style={sectionTitle}>
-              Step 2: Choose sound{" "}
-              {isPremium && <span style={optionalTagStyle}>Optional</span>}
+              {t("config.step2.title")}{" "}
+              {isPremium && <span style={optionalTagStyle}>{t("config.optional")}</span>}
             </h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              {isPremium
-                ? "Select the audio cue, or skip it for an animation-only effect."
-                : "Select the audio cue that plays with the animation."}
+              {isPremium ? t("config.step2.descPremium") : t("config.step2.descBasic")}
             </p>
           </div>
           {isPremium && selectedSound && (
@@ -491,7 +486,7 @@ export default function ConfigurePage() {
               }}
               style={clearButtonStyle}
             >
-              Clear sound
+              {t("config.clearSound")}
             </button>
           )}
         </div>
@@ -513,12 +508,12 @@ export default function ConfigurePage() {
                     <div style={{ fontSize: "28px", lineHeight: 1 }}>{snd.emoji}</div>
                     {active && (
                       <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
-                        Selected
+                        {t("config.selected")}
                       </span>
                     )}
                   </div>
                   <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{snd.name}</div>
-                  <div style={{ ...mutedText, marginTop: "5px" }}>{snd.desc}</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>{t(snd.descKey)}</div>
                 </button>
               );
             })}
@@ -543,12 +538,12 @@ export default function ConfigurePage() {
                     <div style={{ fontSize: "28px", lineHeight: 1 }}>🎵</div>
                     {active && (
                       <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
-                        Selected
+                        {t("config.selected")}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>Custom Upload</div>
-                  <div style={{ ...mutedText, marginTop: "5px" }}>Upload your own MP3, WAV, or OGG</div>
+                  <div style={{ fontWeight: 750, fontSize: "14px", marginTop: "12px", color: "#111827" }}>{t("config.custom.title")}</div>
+                  <div style={{ ...mutedText, marginTop: "5px" }}>{t("config.custom.desc")}</div>
                 </button>
               );
             })()}
@@ -567,9 +562,9 @@ export default function ConfigurePage() {
           >
             <div style={{ marginBottom: "12px" }}>
               <div style={{ fontWeight: 700, fontSize: "14px", color: "#111827", marginBottom: "4px" }}>
-                Upload sound file
+                {t("config.upload.title")}
               </div>
-              <div style={{ ...mutedText }}>MP3, WAV, OGG, or AAC — max 5 MB</div>
+              <div style={{ ...mutedText }}>{t("config.upload.formats")}</div>
             </div>
 
             <input
@@ -590,7 +585,7 @@ export default function ConfigurePage() {
                   gap: "8px",
                 }}
               >
-                Choose file
+                {t("config.upload.choose")}
               </button>
             )}
 
@@ -608,7 +603,7 @@ export default function ConfigurePage() {
                   }}
                 />
                 <span style={{ fontSize: "13px", color: "#374151" }}>
-                  Uploading {customFileName}…
+                  {t("config.upload.uploading", { name: customFileName })}
                 </span>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
@@ -641,7 +636,7 @@ export default function ConfigurePage() {
                   onClick={() => playSound("custom")}
                   style={{ ...secondaryButton, gap: "6px", fontSize: "13px" }}
                 >
-                  ▶ Preview
+                  {t("config.upload.preview")}
                 </button>
                 <button
                   type="button"
@@ -652,7 +647,7 @@ export default function ConfigurePage() {
                   }}
                   style={{ ...secondaryButton, color: "#b42318", borderColor: "#f1b7b0", fontSize: "13px" }}
                 >
-                  Remove
+                  {t("config.upload.remove")}
                 </button>
               </div>
             )}
@@ -666,7 +661,7 @@ export default function ConfigurePage() {
                   onClick={() => fileInputRef.current?.click()}
                   style={{ marginLeft: "10px", ...secondaryButton, fontSize: "12px", minHeight: "30px", padding: "0 10px" }}
                 >
-                  Try again
+                  {t("config.upload.tryAgain")}
                 </button>
               </div>
             )}
@@ -676,15 +671,15 @@ export default function ConfigurePage() {
 
       <section style={stepCardStyle}>
         <div style={{ marginBottom: "16px" }}>
-          <h2 style={sectionTitle}>Step 3: Preview and save</h2>
+          <h2 style={sectionTitle}>{t("config.step3.title")}</h2>
           <p style={{ ...mutedText, margin: 0 }}>
             {canAdd
-              ? "Preview the final add-to-cart experience, then save it to your animation list."
+              ? t("config.step3.descReady")
               : selectedSound === "custom" && !customSoundUrl
-                ? "Upload a sound file to enable preview and save."
+                ? t("config.step3.descUpload")
                 : isPremium
-                  ? "Select an animation, a sound, or both to enable preview and save."
-                  : "Select an animation and a sound to enable preview and save."}
+                  ? t("config.step3.descPremium")
+                  : t("config.step3.descBasic")}
           </p>
         </div>
             <div
@@ -770,21 +765,21 @@ export default function ConfigurePage() {
                 </div>
                 <div style={{ marginTop: "14px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
                   {!canAdd
-                    ? isPremium ? "Select an animation or a sound" : "Select an animation and a sound"
+                    ? isPremium ? t("config.preview.selectPremium") : t("config.preview.selectBasic")
                     : isPlaying
-                      ? "Preview playing"
+                      ? t("config.preview.playing")
                       : selectedAnimation
-                        ? "Preview animation"
-                        : "Preview sound"}
+                        ? t("config.preview.animation")
+                        : t("config.preview.sound")}
                 </div>
                 <div style={{ marginTop: "4px", fontSize: "12px", color: "#6b7280" }}>
                   {!canAdd
-                    ? isPremium ? "Preview unlocks once you pick at least one" : "Preview unlocks once both are picked"
+                    ? isPremium ? t("config.preview.unlockPremium") : t("config.preview.unlockBasic")
                     : selectedAnimation && selectedSound
-                      ? "Plays the animation with the selected sound"
+                      ? t("config.preview.playsBoth")
                       : selectedAnimation
-                        ? "Plays the animation with no sound"
-                        : "Plays the sound with no animation"}
+                        ? t("config.preview.playsAnim")
+                        : t("config.preview.playsSound")}
                 </div>
               </button>
 
@@ -801,26 +796,26 @@ export default function ConfigurePage() {
               >
                 <div>
                   <div style={{ ...mutedText, fontWeight: 800, marginBottom: "12px", textTransform: "uppercase" }}>
-                    Selected combination
+                    {t("config.selected.combination")}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px", marginBottom: "16px" }}>
                     <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
                       <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedAnimationOption?.emoji ?? "—"}</div>
                       <div style={{ fontSize: "14px", fontWeight: 700, color: selectedAnimationOption ? "#111827" : "#9ca3af" }}>
-                        {selectedAnimationOption?.name ?? "No animation"}
+                        {selectedAnimationOption?.name ?? t("config.selected.noAnimation")}
                       </div>
-                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Animation</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>{t("config.selected.animationLabel")}</div>
                     </div>
                     <div style={{ border: "1px solid #ececec", borderRadius: "10px", padding: "14px", background: "#fafafa" }}>
                       <div style={{ fontSize: "24px", marginBottom: "8px" }}>{selectedSoundOption?.emoji ?? "—"}</div>
                       <div style={{ fontSize: "14px", fontWeight: 700, color: selectedSoundOption ? "#111827" : "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {selectedSoundOption?.name ?? "No sound"}
+                        {selectedSoundOption?.name ?? t("config.selected.noSound")}
                       </div>
-                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>Sound</div>
+                      <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>{t("config.selected.soundLabel")}</div>
                     </div>
                   </div>
                   <p style={{ margin: 0, fontSize: "13px", color: "#4b5563", lineHeight: "1.5" }}>
-                    Save this to My Animations, then choose which saved effect is live on the storefront.
+                    {t("config.selected.saveNote")}
                   </p>
                 </div>
 
@@ -842,7 +837,7 @@ export default function ConfigurePage() {
                         opacity: !canAdd ? 0.55 : 1,
                       }}
                     >
-                      {isPlaying ? "Playing..." : "Preview"}
+                      {isPlaying ? t("config.btn.playing") : t("config.btn.preview")}
                     </button>
                     <button
                       type="submit"
@@ -855,7 +850,7 @@ export default function ConfigurePage() {
                         opacity: !canAdd ? 0.55 : 1,
                       }}
                     >
-                      {isSaving ? "Saving..." : "Add to My Animations"}
+                      {isSaving ? t("config.btn.saving") : t("config.btn.add")}
                     </button>
                   </div>
                 </Form>

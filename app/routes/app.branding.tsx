@@ -5,6 +5,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireEntitlements, getEntitlements } from "../services/billing.server";
+import { getServerT } from "../i18n";
+import { useT } from "../i18n/context";
 import { fetchBranding, saveBranding, type FtcBranding } from "../utils/shopify-graphql";
 import {
   card,
@@ -27,12 +29,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  if (request.method !== "POST") return { success: false, error: "Invalid method" };
+  const t = getServerT(request);
+  if (request.method !== "POST") return { success: false, error: t("branding.error.invalidMethod") };
 
   const { admin, session } = await authenticate.admin(request);
   const { isPremium } = await getEntitlements(session.shop);
   if (!isPremium) {
-    return { success: false, error: "Branding is a Premium feature. Upgrade to customize your bubble." };
+    return { success: false, error: t("branding.error.premium") };
   }
 
   try {
@@ -51,7 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: true, error: null };
   } catch (err: any) {
     console.error("[FlyToCart] Branding save failed:", err?.message);
-    return { success: false, error: err?.message || "Failed to save" };
+    return { success: false, error: err?.message || t("branding.error.saveFailed") };
   }
 };
 
@@ -61,6 +64,7 @@ export default function BrandingPage() {
   const navigation    = useNavigation();
   const navigate      = useNavigate();
   const shopify       = useAppBridge();
+  const t             = useT();
   const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
 
   const isSaving    = navigation.state === "submitting";
@@ -105,7 +109,7 @@ export default function BrandingPage() {
   useEffect(() => {
     if (!actionData) return;
     if (actionData.success) {
-      shopify.toast.show("Branding saved!", { duration: 3000 });
+      shopify.toast.show(t("branding.toast.saved"), { duration: 3000 });
     } else if (actionData.success === false && actionData.error) {
       shopify.toast.show(actionData.error, { isError: true, duration: 5000 });
     }
@@ -118,7 +122,7 @@ export default function BrandingPage() {
     const reset = () => { if (fileInputRef.current) fileInputRef.current.value = ""; };
 
     if (file.size > 2 * 1024 * 1024) {
-      shopify.toast.show("Logo must be under 2 MB — please choose a smaller file.", { isError: true, duration: 5000 });
+      shopify.toast.show(t("branding.toast.tooBig"), { isError: true, duration: 5000 });
       reset();
       return;
     }
@@ -130,12 +134,12 @@ export default function BrandingPage() {
       const { naturalWidth: w, naturalHeight: h } = img;
 
       if (w < 50 || h < 50) {
-        shopify.toast.show(`Image is too small (${w}×${h}px). Minimum size is 50×50 px.`, { isError: true, duration: 5000 });
+        shopify.toast.show(t("branding.toast.tooSmall", { w, h }), { isError: true, duration: 5000 });
         reset();
         return;
       }
       if (w > 4000 || h > 4000) {
-        shopify.toast.show(`Image is too large (${w}×${h}px). Maximum size is 4000×4000 px.`, { isError: true, duration: 5000 });
+        shopify.toast.show(t("branding.toast.tooLarge", { w, h }), { isError: true, duration: 5000 });
         reset();
         return;
       }
@@ -152,7 +156,7 @@ export default function BrandingPage() {
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      shopify.toast.show("Could not read image — please try a different file.", { isError: true, duration: 5000 });
+      shopify.toast.show(t("branding.toast.unreadable"), { isError: true, duration: 5000 });
       reset();
     };
     img.src = objectUrl;
@@ -173,7 +177,7 @@ export default function BrandingPage() {
 
   if (locked) {
     return (
-      <s-page heading="Branding">
+      <s-page heading={t("branding.pageHeading")}>
         <div style={pageShell}>
           <div
             style={{
@@ -186,14 +190,13 @@ export default function BrandingPage() {
           >
             <div style={{ fontSize: "40px", lineHeight: 1, marginBottom: "16px" }}>✨</div>
             <h2 style={{ margin: "0 0 8px", fontSize: "22px", color: "#1e1b4b" }}>
-              Branding is a Premium feature
+              {t("branding.locked.title")}
             </h2>
             <p style={{ margin: "0 auto 22px", maxWidth: "460px", color: "#3730a3", fontSize: "14px", lineHeight: 1.6 }}>
-              Upgrade to Premium ($10/month) to put your own logo in the flying bubble
-              and set a custom bubble background color.
+              {t("branding.locked.desc")}
             </p>
             <button type="button" style={primaryButton} onClick={() => navigate("/app/billing")}>
-              Upgrade to Premium
+              {t("branding.locked.cta")}
             </button>
           </div>
         </div>
@@ -202,32 +205,32 @@ export default function BrandingPage() {
   }
 
   return (
-    <s-page heading="Branding">
+    <s-page heading={t("branding.pageHeading")}>
       <div style={pageShell}>
 
         {/* Header */}
         <div style={{ ...cardPadding, marginBottom: "16px" }}>
           <h2 style={{ margin: "0 0 6px", color: "#111827", fontSize: "22px", lineHeight: "1.2" }}>
-            Bubble branding
+            {t("branding.header.title")}
           </h2>
           <p style={{ ...mutedText, margin: 0, maxWidth: "640px" }}>
-            Control what the flying bubble looks like and what image it uses.
+            {t("branding.header.desc")}
           </p>
         </div>
 
         {/* Bubble source */}
         <section style={{ ...cardPadding, marginBottom: "16px" }}>
           <div style={{ marginBottom: "16px" }}>
-            <h2 style={sectionTitle}>Step 1: Bubble image source</h2>
-            <p style={{ ...mutedText, margin: 0 }}>Choose what image the flying bubble shows.</p>
+            <h2 style={sectionTitle}>{t("branding.step1.title")}</h2>
+            <p style={{ ...mutedText, margin: 0 }}>{t("branding.step1.desc")}</p>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "12px" }}>
             {(["product", "logo"] as const).map((mode) => {
               const active = bubbleMode === mode;
-              const label  = mode === "product" ? "Product image" : "Brand logo";
+              const label  = mode === "product" ? t("branding.mode.product.label") : t("branding.mode.logo.label");
               const desc   = mode === "product"
-                ? "Use the product's own image from the page. Falls back to your logo if none is found."
-                : "Always use your uploaded brand logo as the bubble, regardless of product image.";
+                ? t("branding.mode.product.desc")
+                : t("branding.mode.logo.desc");
               return (
                 <button
                   key={mode}
@@ -249,7 +252,7 @@ export default function BrandingPage() {
                     <div style={{ fontWeight: 700, fontSize: "14px", color: "#111827" }}>{label}</div>
                     {active && (
                       <span style={{ background: "#111827", borderRadius: "999px", color: "#fff", fontSize: "11px", fontWeight: 800, padding: "3px 8px" }}>
-                        Selected
+                        {t("branding.selected")}
                       </span>
                     )}
                   </div>
@@ -263,9 +266,9 @@ export default function BrandingPage() {
         {/* Step 2: Logo */}
         <section style={{ ...cardPadding, marginBottom: "16px" }}>
           <div style={{ marginBottom: "16px" }}>
-            <h2 style={sectionTitle}>Step 2: Brand logo (optional)</h2>
+            <h2 style={sectionTitle}>{t("branding.step2.title")}</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              Upload a logo or icon — PNG, JPG, WebP or GIF. Max 2 MB, between 50×50 and 4000×4000 px. It will fill the bubble circle.
+              {t("branding.step2.desc")}
             </p>
           </div>
 
@@ -288,7 +291,7 @@ export default function BrandingPage() {
                   onClick={() => fileInputRef.current?.click()}
                   style={secondaryButton}
                 >
-                  Choose image
+                  {t("branding.chooseImage")}
                 </button>
               )}
 
@@ -300,7 +303,7 @@ export default function BrandingPage() {
                     border: "2px solid #e5e7eb", borderTopColor: "#111827",
                     borderRadius: "50%", animation: "spin 0.7s linear infinite",
                   }} />
-                  <span style={{ fontSize: "13px", color: "#374151" }}>Uploading {logoFileName}…</span>
+                  <span style={{ fontSize: "13px", color: "#374151" }}>{t("branding.uploading", { name: logoFileName })}</span>
                   <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
               )}
@@ -315,7 +318,7 @@ export default function BrandingPage() {
                   }}>
                     <span>✓</span>
                     <span style={{ maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {logoFileName || "Logo uploaded"}
+                      {logoFileName || t("branding.logoUploaded")}
                     </span>
                   </div>
                   <button
@@ -323,14 +326,14 @@ export default function BrandingPage() {
                     onClick={() => fileInputRef.current?.click()}
                     style={{ ...secondaryButton, fontSize: "13px" }}
                   >
-                    Replace
+                    {t("branding.replace")}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setLogoUrl(""); setLogoFileName(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
                     style={{ ...secondaryButton, color: "#b42318", borderColor: "#f1b7b0", fontSize: "13px" }}
                   >
-                    Remove
+                    {t("branding.remove")}
                   </button>
                 </div>
               )}
@@ -341,9 +344,9 @@ export default function BrandingPage() {
         {/* Step 3: Background color */}
         <section style={{ ...cardPadding, marginBottom: "16px" }}>
           <div style={{ marginBottom: "16px" }}>
-            <h2 style={sectionTitle}>Step 3: Bubble background colour</h2>
+            <h2 style={sectionTitle}>{t("branding.step3.title")}</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              Sets the circle background. Visible when there is no logo, or shows through transparent logo areas.
+              {t("branding.step3.desc")}
             </p>
           </div>
 
@@ -366,7 +369,7 @@ export default function BrandingPage() {
                 <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827" }}>
                   {bgColor.toUpperCase()}
                 </div>
-                <div style={{ ...mutedText, fontSize: "12px" }}>Click swatch to change</div>
+                <div style={{ ...mutedText, fontSize: "12px" }}>{t("branding.clickSwatch")}</div>
               </div>
             </label>
 
@@ -395,9 +398,9 @@ export default function BrandingPage() {
         {/* Step 4: Preview + Save */}
         <section style={cardPadding}>
           <div style={{ marginBottom: "16px" }}>
-            <h2 style={sectionTitle}>Step 4: Preview and save</h2>
+            <h2 style={sectionTitle}>{t("branding.step4.title")}</h2>
             <p style={{ ...mutedText, margin: 0 }}>
-              This is how the brand bubble will look when no product image is found.
+              {t("branding.step4.desc")}
             </p>
           </div>
 
@@ -441,7 +444,7 @@ export default function BrandingPage() {
                 </div>
               </div>
               <div style={{ fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-                Brand bubble preview
+                {t("branding.preview.label")}
               </div>
             </div>
 
@@ -456,7 +459,7 @@ export default function BrandingPage() {
             }}>
               <div>
                 <div style={{ ...mutedText, fontWeight: 800, marginBottom: "12px", textTransform: "uppercase" }}>
-                  Current settings
+                  {t("branding.current")}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -469,16 +472,16 @@ export default function BrandingPage() {
                     }} />
                     <div>
                       <div style={{ fontSize: "13px", fontWeight: 700, color: "#111827" }}>
-                        {logoUrl ? (logoFileName || "Logo uploaded") : "No logo"}
+                        {logoUrl ? (logoFileName || t("branding.logoUploaded")) : t("branding.noLogo")}
                       </div>
                       <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                        Background: {bgColor.toUpperCase()}
+                        {t("branding.background", { color: bgColor.toUpperCase() })}
                       </div>
                     </div>
                   </div>
                 </div>
                 <p style={{ margin: "14px 0 0", fontSize: "13px", color: "#4b5563", lineHeight: "1.5" }}>
-                  This branding applies globally whenever the bubble can't find a product image on the page.
+                  {t("branding.applyNote")}
                 </p>
               </div>
 
@@ -493,7 +496,7 @@ export default function BrandingPage() {
                   color: "#92400e",
                   fontWeight: 600,
                 }}>
-                  ⚠️ Upload a logo in Step 2 before saving — "Brand logo" mode needs an image.
+                  {t("branding.logoModeWarning")}
                 </div>
               )}
 
@@ -512,7 +515,7 @@ export default function BrandingPage() {
                     opacity: bubbleMode === "logo" && !logoUrl ? 0.6 : 1,
                   }}
                 >
-                  {isSaving ? "Saving..." : "Save branding"}
+                  {isSaving ? t("branding.saving") : t("branding.save")}
                 </button>
               </Form>
             </div>

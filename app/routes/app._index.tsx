@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { requireEntitlements } from "../services/billing.server";
 import { fetchConfigurations } from "../utils/shopify-graphql";
+import { useT, type TFunction } from "../i18n/context";
 import {
   badge,
   card,
@@ -47,25 +48,30 @@ const SOUND_NAMES: Record<string, string> = {
 };
 
 // A live config may be animation only, sound only, or both.
-function liveSummary(config: { animationKey: string; soundKey: string }) {
+function liveSummary(config: { animationKey: string; soundKey: string }, t: TFunction) {
   const animation = config.animationKey
     ? (ANIMATION_NAMES[config.animationKey] ?? config.animationKey)
     : null;
   const sound = config.soundKey ? (SOUND_NAMES[config.soundKey] ?? config.soundKey) : null;
 
-  if (animation && sound) return `${animation} with ${sound}`;
-  if (animation) return `${animation} (no sound)`;
-  if (sound) return `${sound} (no animation)`;
-  return "An empty effect";
+  if (animation && sound) return t("home.summary.both", { animation, sound });
+  if (animation) return t("home.summary.animationOnly", { animation });
+  if (sound) return t("home.summary.soundOnly", { sound });
+  return t("home.summary.empty");
 }
 
 export default function Index() {
   const { liveConfig, totalCount, shop, tier, isPremium, inTrial } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const t = useT();
   const hasConfigs = totalCount > 0;
   const isLive = Boolean(liveConfig);
 
-  const planLabel = inTrial ? "Trial — full access" : tier === "premium" ? "Premium plan" : "Basic plan";
+  const planLabel = inTrial
+    ? t("home.plan.trial")
+    : tier === "premium"
+      ? t("home.plan.premium")
+      : t("home.plan.basic");
 
   const API_KEY = "9620563a9ea6bc8e3f91ec87e893f4e8";
   const EMBED_HANDLE = "app_embed";
@@ -73,24 +79,24 @@ export default function Index() {
 
   const steps = [
     {
-      title: "Create an animation",
-      description: "Choose the animation and sound combination merchants will see on add to cart.",
+      title: t("home.step1.title"),
+      description: t("home.step1.desc"),
       complete: hasConfigs,
-      action: "Configure",
+      action: t("home.step1.action"),
       onClick: () => navigate("/app/configure"),
     },
     {
-      title: "Set one live",
-      description: "Pick the saved combination that should run on the storefront.",
+      title: t("home.step2.title"),
+      description: t("home.step2.desc"),
       complete: isLive,
-      action: "My Animations",
+      action: t("home.step2.action"),
       onClick: () => navigate("/app/animations"),
     },
     {
-      title: "Enable app embed",
-      description: "Turn on Fly to Cart Pro in the theme editor and save the theme.",
+      title: t("home.step3.title"),
+      description: t("home.step3.desc"),
       complete: false,
-      action: "Open Theme Editor",
+      action: t("home.step3.action"),
       href: appEmbedDeepLink,
     },
   ];
@@ -99,12 +105,12 @@ export default function Index() {
   const progress = Math.round((completedSteps / steps.length) * 100);
 
   return (
-    <s-page heading="Fly to Cart Pro">
+    <s-page heading={t("home.pageHeading")}>
       <s-button
         slot="primary-action"
         onClick={() => navigate(hasConfigs ? "/app/animations" : "/app/configure")}
       >
-        {hasConfigs ? "Manage Animations" : "Create Animation"}
+        {hasConfigs ? t("home.primary.manage") : t("home.primary.create")}
       </s-button>
 
       <div style={pageShell}>
@@ -133,7 +139,7 @@ export default function Index() {
                     color: isLive ? "#166534" : "#92400e",
                   }}
                 >
-                  {isLive ? "Live on storefront" : "Setup in progress"}
+                  {isLive ? t("home.badge.live") : t("home.badge.setup")}
                 </span>
                 <span
                   style={{
@@ -147,14 +153,16 @@ export default function Index() {
                 </span>
               </div>
               <h2 style={{ margin: "0 0 8px", fontSize: "24px", lineHeight: "1.2" }}>
-                {isLive ? "Your add-to-cart effect is active" : "Finish setup to launch your first effect"}
+                {isLive ? t("home.hero.titleLive") : t("home.hero.titleSetup")}
               </h2>
               <p style={{ ...mutedText, margin: "0 0 18px", maxWidth: "620px" }}>
                 {isLive && liveConfig
-                  ? `${liveSummary(liveConfig)} is currently selected for your storefront.`
+                  ? t("home.hero.descLive", { summary: liveSummary(liveConfig, t) })
                   : hasConfigs
-                    ? `You have ${totalCount} saved animation${totalCount === 1 ? "" : "s"}. Set one live, then enable the app embed.`
-                    : "Create a polished animation and sound combo, set it live, and enable the app embed in your Shopify theme."}
+                    ? totalCount === 1
+                      ? t("home.hero.descConfigsOne")
+                      : t("home.hero.descConfigsMany", { count: totalCount })
+                    : t("home.hero.descEmpty")}
               </p>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <button
@@ -162,20 +170,20 @@ export default function Index() {
                   style={primaryButton}
                   onClick={() => navigate(hasConfigs ? "/app/animations" : "/app/configure")}
                 >
-                  {hasConfigs ? "Manage Animations" : "Start Setup"}
+                  {hasConfigs ? t("home.primary.manage") : t("home.hero.startSetup")}
                 </button>
                 <a href={appEmbedDeepLink} target="_blank" rel="noreferrer" style={secondaryButton}>
-                  Theme Editor
+                  {t("home.hero.themeEditor")}
                 </a>
               </div>
             </div>
             <div style={{ background: "#fafafa", padding: "24px" }}>
               <div style={{ ...mutedText, marginBottom: "10px", fontWeight: 700 }}>
-                Setup progress
+                {t("home.progress.title")}
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "14px" }}>
                 <span style={{ fontSize: "38px", fontWeight: 850, lineHeight: 1 }}>{completedSteps}</span>
-                <span style={{ color: "#6b7280", fontSize: "14px" }}>of {steps.length} complete</span>
+                <span style={{ color: "#6b7280", fontSize: "14px" }}>{t("home.progress.ofComplete", { total: steps.length })}</span>
               </div>
               <div style={{ background: "#e5e7eb", borderRadius: "999px", height: "8px", overflow: "hidden" }}>
                 <div
@@ -193,8 +201,8 @@ export default function Index() {
 
         <div style={{ ...cardPadding, marginBottom: "16px" }}>
           <div style={{ marginBottom: "18px" }}>
-            <h2 style={sectionTitle}>Setup guide</h2>
-            <p style={{ ...mutedText, margin: 0 }}>Complete these steps in order. Each step keeps the merchant moving without leaving dead ends.</p>
+            <h2 style={sectionTitle}>{t("home.guide.title")}</h2>
+            <p style={{ ...mutedText, margin: 0 }}>{t("home.guide.desc")}</p>
           </div>
 
           <div style={{ display: "grid", gap: "10px" }}>
@@ -261,13 +269,13 @@ export default function Index() {
             }}
           >
             <div>
-              <h3 style={{ ...sectionTitle, color: "#1e1b4b" }}>Unlock Premium — $10/month</h3>
+              <h3 style={{ ...sectionTitle, color: "#1e1b4b" }}>{t("home.upgrade.title")}</h3>
               <p style={{ margin: 0, color: "#3730a3", fontSize: "13px", lineHeight: 1.5 }}>
-                Add animation-only and sound-only effects, plus custom logo and bubble color.
+                {t("home.upgrade.desc")}
               </p>
             </div>
             <button type="button" style={primaryButton} onClick={() => navigate("/app/billing")}>
-              Upgrade to Premium
+              {t("home.upgrade.cta")}
             </button>
           </div>
         )}
@@ -280,23 +288,25 @@ export default function Index() {
           }}
         >
           <div style={cardPadding}>
-            <h3 style={sectionTitle}>Saved animations</h3>
+            <h3 style={sectionTitle}>{t("home.saved.title")}</h3>
             <p style={{ ...mutedText, margin: "0 0 14px" }}>
               {totalCount === 0
-                ? "No saved animations yet."
-                : `${totalCount} saved animation${totalCount === 1 ? "" : "s"} ready to manage.`}
+                ? t("home.saved.none")
+                : totalCount === 1
+                  ? t("home.saved.countOne")
+                  : t("home.saved.countMany", { count: totalCount })}
             </p>
             <button type="button" style={secondaryButton} onClick={() => navigate("/app/animations")}>
-              View List
+              {t("home.saved.view")}
             </button>
           </div>
           <div style={cardPadding}>
-            <h3 style={sectionTitle}>Need help?</h3>
+            <h3 style={sectionTitle}>{t("home.help.title")}</h3>
             <p style={{ ...mutedText, margin: "0 0 14px" }}>
-              Review setup instructions, troubleshooting, and support details.
+              {t("home.help.desc")}
             </p>
             <button type="button" style={secondaryButton} onClick={() => navigate("/app/help")}>
-              Open Help
+              {t("home.help.open")}
             </button>
           </div>
         </div>

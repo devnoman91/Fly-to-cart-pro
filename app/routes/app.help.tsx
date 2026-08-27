@@ -1,6 +1,7 @@
 import type { HeadersFunction } from "react-router";
 import { Link, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useT } from "../i18n/context";
 import {
   cardPadding,
   mutedText,
@@ -9,49 +10,29 @@ import {
   sectionTitle,
 } from "../styles/ui";
 
-const setupSteps = [
-  {
-    title: "Create an animation",
-    items: [
-      "Open Configure from the app navigation.",
-      "Choose an animation style and a sound effect.",
-      "Preview the combination before saving.",
-      "Save it to My Animations.",
-    ],
-  },
-  {
-    title: "Set one live",
-    items: [
-      "Open My Animations.",
-      "Find the saved combination you want to use.",
-      "Click Set Live. Only one animation can be live at a time.",
-    ],
-  },
-  {
-    title: "Enable the app embed",
-    items: [
-      "Open the Shopify theme editor.",
-      "Turn on the Fly to Cart Pro app embed.",
-      "Save the theme editor changes.",
-    ],
-  },
-];
-
-const faqs = [
-  ["How does the animation trigger?", "The app embed listens for Add to Cart button clicks and plays the selected animation and sound."],
-  ["Can I save multiple animations?", "Yes. You can save multiple combinations and set one live at a time."],
-  ["Will it slow down my store?", "The storefront script uses native browser APIs and avoids external animation libraries."],
-  ["What should I check if it does not fire?", "Confirm an animation is live, the app embed is enabled, and the theme editor changes are saved."],
-];
-
 export default function Help() {
+  const t = useT();
+
+  const setupSteps = [
+    { title: t("help.step1.title"), items: [t("help.step1.i1"), t("help.step1.i2"), t("help.step1.i3"), t("help.step1.i4")] },
+    { title: t("help.step2.title"), items: [t("help.step2.i1"), t("help.step2.i2"), t("help.step2.i3")] },
+    { title: t("help.step3.title"), items: [t("help.step3.i1"), t("help.step3.i2"), t("help.step3.i3")] },
+  ];
+
+  const faqs: [string, string][] = [
+    [t("help.faq.q1"), t("help.faq.a1")],
+    [t("help.faq.q2"), t("help.faq.a2")],
+    [t("help.faq.q3"), t("help.faq.a3")],
+    [t("help.faq.q4"), t("help.faq.a4")],
+  ];
+
   return (
-    <s-page heading="Help & Support">
+    <s-page heading={t("help.pageHeading")}>
       <div style={narrowPageShell}>
         <div style={{ ...cardPadding, marginBottom: "16px" }}>
-          <h2 style={{ margin: "0 0 8px", fontSize: "22px", color: "#111827" }}>Get started quickly</h2>
+          <h2 style={{ margin: "0 0 8px", fontSize: "22px", color: "#111827" }}>{t("help.start.title")}</h2>
           <p style={{ ...mutedText, margin: 0 }}>
-            Follow the same three-step flow used on the home page: create, set live, then enable the app embed.
+            {t("help.start.desc")}
           </p>
         </div>
 
@@ -69,7 +50,7 @@ export default function Help() {
         </div>
 
         <section style={{ ...cardPadding, marginBottom: "16px" }}>
-          <h2 style={sectionTitle}>Frequently asked questions</h2>
+          <h2 style={sectionTitle}>{t("help.faq.title")}</h2>
           <div style={{ display: "grid", gap: "14px", marginTop: "14px" }}>
             {faqs.map(([question, answer]) => (
               <div key={question}>
@@ -81,9 +62,9 @@ export default function Help() {
         </section>
 
         <section style={{ ...cardPadding, marginBottom: "16px" }}>
-          <h2 style={sectionTitle}>Contact support</h2>
+          <h2 style={sectionTitle}>{t("help.contact.title")}</h2>
           <p style={{ ...mutedText, margin: "0 0 14px" }}>
-            Email support for setup, billing, or storefront troubleshooting.
+            {t("help.contact.desc")}
           </p>
           <a href="mailto:hrjobs@nodeagency.co" style={secondaryButton}>
             hrjobs@nodeagency.co
@@ -91,10 +72,10 @@ export default function Help() {
         </section>
 
         <section style={cardPadding}>
-          <h2 style={sectionTitle}>Legal</h2>
+          <h2 style={sectionTitle}>{t("help.legal.title")}</h2>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
-            <Link to="/app/privacy" style={secondaryButton}>Privacy Policy</Link>
-            <Link to="/app/billing" style={secondaryButton}>Billing</Link>
+            <Link to="/app/privacy" style={secondaryButton}>{t("help.legal.privacy")}</Link>
+            <Link to="/app/billing" style={secondaryButton}>{t("help.legal.billing")}</Link>
           </div>
         </section>
       </div>

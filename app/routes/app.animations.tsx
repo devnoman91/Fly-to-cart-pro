@@ -13,6 +13,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { requireActiveSubscription, getEntitlements } from "../services/billing.server";
+import { getServerT } from "../i18n";
+import { useT, type TFunction } from "../i18n/context";
 import {
   fetchConfigurations,
   saveConfigurations,
@@ -51,8 +53,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const t = getServerT(request);
   if (request.method !== "POST") {
-    return { success: false, error: "Invalid method" };
+    return { success: false, error: t("anim.error.invalidMethod") };
   }
 
   const { admin, session } = await authenticate.admin(request);
@@ -73,10 +76,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (isSingleMode) {
         const { isPremium } = await getEntitlements(session.shop);
         if (!isPremium) {
-          return {
-            success: false,
-            error: "Animation-only and sound-only effects are Premium. Upgrade to set this one live.",
-          };
+          return { success: false, error: t("anim.error.premiumSetLive") };
         }
       }
       nextConfigs = configs.map((config) => ({
@@ -88,43 +88,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } else if (intent === "delete" && typeof id === "string") {
       nextConfigs = configs.filter((config) => config.id !== id);
     } else {
-      return { success: false, error: "Unknown action" };
+      return { success: false, error: t("anim.error.unknown") };
     }
 
     await saveConfigurations(admin, nextConfigs);
     return { success: true, error: null };
   } catch (error: any) {
-    return { success: false, error: error?.message || "Failed to update animations" };
+    return { success: false, error: error?.message || t("anim.error.updateFailed") };
   }
 };
 
 // A config may be animation only, sound only, or both — either key can be "".
-const NO_ANIMATION = { name: "No animation", icon: "♪", color: "#64748b" };
-const NO_SOUND = { name: "No sound", icon: "—" };
-
-function getAnimation(key: string) {
-  if (!key) return NO_ANIMATION;
+// Effect proper names (Bounce, Chime, …) stay in English; only descriptive labels translate.
+function getAnimation(key: string, t: TFunction) {
+  if (!key) return { name: t("anim.noAnimation"), icon: "♪", color: "#64748b" };
   return ANIMATIONS[key] ?? { name: key, icon: "?", color: "#111827" };
 }
 
-function getSound(key: string) {
-  if (!key) return NO_SOUND;
+function getSound(key: string, t: TFunction) {
+  if (!key) return { name: t("anim.noSound"), icon: "—" };
   return SOUNDS[key] ?? { name: key, icon: "?" };
 }
 
 // "Bounce + Chime", "Bounce" (silent), or "Chime" (no motion)
-function configLabel(config: { animationKey: string; soundKey: string }) {
+function configLabel(config: { animationKey: string; soundKey: string }, t: TFunction) {
   const parts: string[] = [];
-  if (config.animationKey) parts.push(getAnimation(config.animationKey).name);
-  if (config.soundKey) parts.push(getSound(config.soundKey).name);
-  return parts.join(" + ") || "Empty";
+  if (config.animationKey) parts.push(getAnimation(config.animationKey, t).name);
+  if (config.soundKey) parts.push(getSound(config.soundKey, t).name);
+  return parts.join(" + ") || t("anim.configLabel.empty");
 }
 
-function configMode(config: { animationKey: string; soundKey: string }) {
-  if (config.animationKey && config.soundKey) return "Animation + sound";
-  if (config.animationKey) return "Animation only";
-  if (config.soundKey) return "Sound only";
-  return "Nothing configured";
+function configMode(config: { animationKey: string; soundKey: string }, t: TFunction) {
+  if (config.animationKey && config.soundKey) return t("anim.mode.both");
+  if (config.animationKey) return t("anim.mode.animationOnly");
+  if (config.soundKey) return t("anim.mode.soundOnly");
+  return t("anim.mode.none");
 }
 
 function ActionButton({
@@ -168,6 +166,7 @@ export default function AnimationsPage() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const shopify = useAppBridge();
+  const t = useT();
   const isSubmitting = navigation.state === "submitting";
   const liveConfig = configs.find((config) => config.live);
 
@@ -180,9 +179,9 @@ export default function AnimationsPage() {
   }, [actionData]);
 
   return (
-    <s-page heading="My Animations">
+    <s-page heading={t("anim.pageHeading")}>
       <s-button slot="primary-action" onClick={() => navigate("/app/configure")}>
-        Create Animation
+        {t("anim.create")}
       </s-button>
 
       <div style={pageShell}>
@@ -211,13 +210,13 @@ export default function AnimationsPage() {
           }}
         >
           <div style={{ ...card, padding: "16px" }}>
-            <div style={{ ...mutedText, marginBottom: "6px" }}>Saved</div>
+            <div style={{ ...mutedText, marginBottom: "6px" }}>{t("anim.stat.saved")}</div>
             <div style={{ fontSize: "28px", fontWeight: 800, color: "#111827" }}>{configs.length}</div>
           </div>
           <div style={{ ...card, padding: "16px" }}>
-            <div style={{ ...mutedText, marginBottom: "6px" }}>Live animation</div>
+            <div style={{ ...mutedText, marginBottom: "6px" }}>{t("anim.stat.live")}</div>
             <div style={{ fontSize: "16px", fontWeight: 800, color: liveConfig ? "#111827" : "#6b7280" }}>
-              {liveConfig ? configLabel(liveConfig) : "None active"}
+              {liveConfig ? configLabel(liveConfig, t) : t("anim.stat.none")}
             </div>
           </div>
         </div>
@@ -237,10 +236,10 @@ export default function AnimationsPage() {
             <div>
               <div style={{ fontSize: "44px", lineHeight: 1, marginBottom: "16px" }}>+</div>
               <h2 style={{ margin: "0 0 8px", fontSize: "20px", color: "#111827" }}>
-                No animations saved yet
+                {t("anim.empty.title")}
               </h2>
               <p style={{ margin: "0 0 18px", color: "#6b7280", fontSize: "14px" }}>
-                Create your first add-to-cart animation and sound combination.
+                {t("anim.empty.desc")}
               </p>
               <Link
                 to="/app/configure"
@@ -257,15 +256,15 @@ export default function AnimationsPage() {
                   fontWeight: 700,
                 }}
               >
-                Create Animation
+                {t("anim.create")}
               </Link>
             </div>
           </div>
         ) : (
           <div style={{ display: "grid", gap: "12px" }}>
             {configs.map((config, index) => {
-              const animation = getAnimation(config.animationKey);
-              const sound = getSound(config.soundKey);
+              const animation = getAnimation(config.animationKey, t);
+              const sound = getSound(config.soundKey, t);
               // Sound-only configs have no animation glyph — show the sound's instead
               const tileIcon = config.animationKey ? animation.icon : sound.icon;
 
@@ -304,7 +303,7 @@ export default function AnimationsPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <h2 style={{ margin: 0, fontSize: "17px", color: "#111827" }}>
-                          {configLabel(config)}
+                          {configLabel(config, t)}
                         </h2>
                         {config.live && (
                           <span
@@ -318,7 +317,7 @@ export default function AnimationsPage() {
                               padding: "3px 8px",
                             }}
                           >
-                            Live
+                            {t("anim.badge.live")}
                           </span>
                         )}
                         {config.soundKey === "custom" && (
@@ -333,20 +332,20 @@ export default function AnimationsPage() {
                               padding: "3px 8px",
                             }}
                           >
-                            Custom sound
+                            {t("anim.badge.custom")}
                           </span>
                         )}
                       </div>
                       <div style={{ color: "#6b7280", fontSize: "13px", marginTop: "6px" }}>
-                        Effect #{index + 1} · {configMode(config)}
+                        {t("anim.row.effect", { n: index + 1 })} · {configMode(config, t)}
                         {config.soundKey && (
                           <span style={{ marginLeft: "6px" }}>
-                            · Sound {sound.icon} {sound.name}
+                            · {t("anim.row.soundLabel")} {sound.icon} {sound.name}
                           </span>
                         )}
                         {config.customSoundUrl && (
                           <span style={{ marginLeft: "6px", color: "#9ca3af" }}>
-                            · Uploaded file
+                            · {t("anim.row.uploaded")}
                           </span>
                         )}
                       </div>
@@ -357,14 +356,14 @@ export default function AnimationsPage() {
                     {config.live ? (
                       <Form method="POST">
                         <input type="hidden" name="intent" value="stop" />
-                        <ActionButton disabled={isSubmitting}>Stop</ActionButton>
+                        <ActionButton disabled={isSubmitting}>{t("anim.btn.stop")}</ActionButton>
                       </Form>
                     ) : (
                       <Form method="POST">
                         <input type="hidden" name="intent" value="set_live" />
                         <input type="hidden" name="id" value={config.id} />
                         <ActionButton disabled={isSubmitting} tone="primary">
-                          Set Live
+                          {t("anim.btn.setLive")}
                         </ActionButton>
                       </Form>
                     )}
@@ -372,7 +371,7 @@ export default function AnimationsPage() {
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="id" value={config.id} />
                       <ActionButton disabled={isSubmitting} tone="critical">
-                        Delete
+                        {t("anim.btn.delete")}
                       </ActionButton>
                     </Form>
                   </div>
