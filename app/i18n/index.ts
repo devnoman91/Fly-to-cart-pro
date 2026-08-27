@@ -22,11 +22,34 @@ export function resolveLocale(input?: string | null): Locale {
   return match ?? DEFAULT_LOCALE;
 }
 
-// Shopify appends the merchant's admin locale as a `locale` query param to embedded
-// app requests. Read it from the request URL in a loader.
+// Parse the first usable language tag out of an Accept-Language header,
+// e.g. "es-ES,es;q=0.9,en;q=0.8" → the best supported match.
+function localeFromAcceptLanguage(header: string | null): Locale | null {
+  if (!header) return null;
+  const tags = header
+    .split(",")
+    .map((part) => part.split(";")[0].trim())
+    .filter(Boolean);
+  for (const tag of tags) {
+    const resolved = resolveLocale(tag);
+    if (resolved !== DEFAULT_LOCALE || tag.toLowerCase().startsWith("en")) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+// Determine the merchant's language for a request. Priority:
+//   1. Shopify's `locale` query param (appended to embedded app requests)
+//   2. the browser's Accept-Language header (fallback)
+//   3. English default
 export function getRequestLocale(request: Request): Locale {
   const url = new URL(request.url);
-  return resolveLocale(url.searchParams.get("locale"));
+  const fromParam = url.searchParams.get("locale");
+  if (fromParam) return resolveLocale(fromParam);
+
+  const fromHeader = localeFromAcceptLanguage(request.headers.get("accept-language"));
+  return fromHeader ?? DEFAULT_LOCALE;
 }
 
 // Server-side translate — for loaders/actions that return user-facing strings
